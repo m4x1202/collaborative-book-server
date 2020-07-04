@@ -42,6 +42,11 @@ var wsupgrader = websocket.Upgrader{
  * 	submit_story(story text)
  * 	show_story(user name and stage to show the story from)
  */
+
+type StartSessionPayload struct {
+	LastStage int `json:"last_stage"`
+}
+
 type ClientMessage struct {
 	MessageType string `json:"type"` // registration, start_session, close_room, submit_story, show_story
 	Room        string `json:"room"`
@@ -125,7 +130,67 @@ func handleCloseRoom(message *ClientMessage, connection *websocket.Conn) error {
 }
 
 func handleStartSession(message *ClientMessage, connection *websocket.Conn) error {
-	return fmt.Errorf("TODO: Write handleStartSession")
+	room, ok := rooms[message.Room]
+	if !ok {
+		return fmt.Errorf("Tried to start a session for room that does not exist: %s", message.Room)
+	}
+
+	// Make sure only the admin opens a room
+	user, ok := room.Users[message.UserName]
+	if !ok {
+		return fmt.Errorf("User that is not part of the room tried to open a session: %s", message.UserName)
+	}
+	if !user.IsAdmin {
+		return fmt.Errorf("User that is not an admin tried to open a session: %s", message.UserName)
+	}
+
+	room.RoomState = RoomStateWriteStories
+	room.Story.ParticipatingUsers = make(map[string]bool)
+	for userName := range room.Users {
+		room.Story.ParticipatingUsers[userName] = true
+	}
+
+	room.Story.StoryStages = make([]UserStoryStage, 0)
+
+	userMapping := make(map[string]string)
+	for userName := range room.Users {
+		userMapping[userName] = userName // In the first stage we don't have a prior story --> keep 1:1 mapping
+	}
+
+	firstStage := UserStoryStage{
+		SubmittedStories: make(map[string]string),
+		UserMapping:      userMapping,
+	}
+	room.Story.StoryStages = append(room.Story.StoryStages, firstStage)
+
+	var payload StartSessionPayload
+	err := json.Unmarshal([]byte(message.Payload), &payload)
+	if err != nil {
+		return err
+	}
+	room.Story.LastStage = payload.LastStage
+
+	// Tell each user to start with the first round
+	for participant := range room.Story.ParticipatingUsers {
+
+		text := "Start typing your story!"
+		updateMessage := RoundUpdateMessage{
+			MessageType:  "round_update",
+			CurrentStage: len(room.Story.StoryStages),
+			LastStage:    room.Story.LastStage,
+			Text:         text,
+		}
+
+		marshalled, err := json.Marshal(updateMessage)
+		if err != nil {
+			return err
+		}
+
+		user := room.Users[participant]
+		user.Connection.WriteMessage(websocket.TextMessage, marshalled)
+	}
+
+	return sendRoomUpdate(message.Room)
 }
 
 func handleSubmitStory(message *ClientMessage, connection *websocket.Conn) error {
