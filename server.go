@@ -97,14 +97,6 @@ type Room struct {
 var openConnectionMutex sync.Mutex
 var openConnections = make(map[string]map[string]*websocket.Conn)
 
-func debugPrintOpenConnections() {
-	for room, userMap := range openConnections {
-		for name, connection := range userMap {
-			log.Tracef("Room: %s, Name: %s, Connection %v", room, name, connection)
-		}
-	}
-}
-
 func handleShowStory(message *ClientMessage, connection *websocket.Conn) error {
 	return fmt.Errorf("TODO: Write handleShowStory")
 }
@@ -154,8 +146,6 @@ func register(message *ClientMessage, connection *websocket.Conn) RegistrationRe
 	openConnections[message.Room][message.UserName] = connection
 
 	log.Printf("Registered user %s in room %s", message.UserName, message.Room)
-
-	debugPrintOpenConnections()
 
 	result := RegistrationResult{
 		MessageType: "registration",
