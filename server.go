@@ -212,7 +212,7 @@ func handleCloseRoom(message *ClientMessage, connection *websocket.Conn) error {
 	}
 
 	// Remove room from list
-	rooms[message.Room] = nil
+	delete(rooms, message.Room)
 	return nil
 }
 
