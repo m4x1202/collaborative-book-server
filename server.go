@@ -12,25 +12,21 @@ import (
 )
 
 func main() {
-	r := gin.Default()
+	client := gin.Default()
 
-	// load all html files directly in assets as templates - this is so they can be serverd via c.HTML below.
-	r.LoadHTMLGlob("assets/*.html")
+	// serve static files under localhost:8080/assets - this is for css and js
+	client.Static("/", "./client")
+
+	go client.Run(":8080") // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
+
+	server := gin.Default()
 
 	// serve the client websocket
-	r.GET("/ws", func(c *gin.Context) {
+	server.GET("/", func(c *gin.Context) {
 		go wshandler(c.Writer, c.Request)
 	})
 
-	// serve static files under localhost:8080/assets - this is for css and js
-	r.Static("/assets", "./assets")
-
-	// serve index.html by default
-	r.GET("/", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "index.html", nil)
-	})
-
-	r.Run(":8080") // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
+	server.Run(":8081")
 }
 
 var wsupgrader = websocket.Upgrader{
