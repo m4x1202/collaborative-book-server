@@ -85,17 +85,34 @@ type CloseRoomMessage struct {
 /// END Server/Client Interface
 
 type UserStoryStage struct {
-	UserName string
-	Story    string
+	SubmittedStories map[string]string // Maps from user name to story
+	Stage            int
 }
+
+type UserStory struct {
+	StoryStages        []UserStoryStage
+	ParticipatingUsers map[string]bool
+}
+
+type User struct {
+	Name       string
+	Connection *websocket.Conn
+	IsAdmin    bool
+}
+
+const (
+	RoomStateLobby        = 0
+	RoomStateWriteStories = 1
+	RoomStateShowStories  = 2
+)
 
 type Room struct {
-	StoryStages []UserStoryStage
-	UserMap     map[string]*websocket.Conn
+	Users     map[string]User
+	RoomState int
+	Story     UserStory
 }
 
-var openConnectionMutex sync.Mutex
-var openConnections = make(map[string]map[string]*websocket.Conn)
+var rooms = make(map[string]Room)
 
 func handleShowStory(message *ClientMessage, connection *websocket.Conn) error {
 	return fmt.Errorf("TODO: Write handleShowStory")
@@ -113,14 +130,51 @@ func handleSubmitStory(message *ClientMessage, connection *websocket.Conn) error
 	return fmt.Errorf("TODO: Write handleSubmitStory")
 }
 
-func sendConnectedUsersUpdate(room string) error {
-	message := RoomUpdateMessage{
-		MessageType: "user_update",
+func sendRoomUpdate(roomName string) error {
+
+	room, ok := rooms[roomName]
+	if !ok {
+		return fmt.Errorf("Tried to send update for room that does not exist: %s", roomName)
 	}
 
-	// TODO set is_admin true for first user
-	for userName := range openConnections[room] {
-		message.UserList = append(message.UserList, Player{UserName: userName})
+	message := RoomUpdateMessage{
+		MessageType: "room_update",
+		ShowLobby:   room.RoomState == RoomStateLobby,
+		UserList:    make([]Player, 0),
+	}
+
+	// Create the player for each connected user
+	for _, user := range room.Users {
+
+		status := "waiting" // default state in lobby or during show stories
+
+		// if round is going on and the user is in the participating users
+		if room.RoomState == RoomStateWriteStories {
+
+			// check if the user takes part in this round
+			_, ok := room.Story.ParticipatingUsers[user.Name]
+			if ok {
+				// find last entry into the story stages
+				last := room.Story.StoryStages[len(room.Story.StoryStages)-1]
+
+				_, ok := last.SubmittedStories[user.Name]
+				if ok {
+					// if the user has something submitted already
+					status = "submitted"
+				} else {
+					// if the user has not submitted a story yet
+					status = "writing"
+				}
+			}
+		}
+
+		player := Player{
+			UserName: user.Name,
+			IsAdmin:  user.IsAdmin,
+			Status:   status,
+		}
+
+		message.UserList = append(message.UserList, player)
 	}
 
 	marshalled, err := json.Marshal(message)
@@ -128,22 +182,38 @@ func sendConnectedUsersUpdate(room string) error {
 		return err
 	}
 
-	for _, connection := range openConnections[room] {
-		connection.WriteMessage(websocket.TextMessage, marshalled)
+	// Send the room update to every user in the room
+	for _, user := range room.Users {
+		user.Connection.WriteMessage(websocket.TextMessage, marshalled)
 	}
 
 	return nil
 }
 
 func register(message *ClientMessage, connection *websocket.Conn) RegistrationResult {
-
-	openConnectionMutex.Lock()
-	defer openConnectionMutex.Unlock()
-
-	if openConnections[message.Room] == nil {
-		openConnections[message.Room] = make(map[string]*websocket.Conn)
+	room, ok := rooms[message.Room]
+	if !ok {
+		story := UserStory{
+			StoryStages:        make([]UserStoryStage, 0),
+			ParticipatingUsers: make(map[string]bool),
+		}
+		rooms[message.Room] = Room{
+			Users:     make(map[string]User),
+			Story:     story,
+			RoomState: RoomStateLobby,
+		}
+		room = rooms[message.Room]
 	}
-	openConnections[message.Room][message.UserName] = connection
+
+	// Make the new user the admin if he's the first to enter the room.
+	isAdmin := len(room.Users) == 0
+
+	// Add a user to the room. Overwrite with new connection if the user already existed.
+	room.Users[message.UserName] = User{
+		Name:       message.UserName,
+		Connection: connection,
+		IsAdmin:    isAdmin,
+	}
 
 	log.Printf("Registered user %s in room %s", message.UserName, message.Room)
 
@@ -163,7 +233,7 @@ func handleRegistration(message *ClientMessage, connection *websocket.Conn) erro
 
 	connection.WriteMessage(websocket.TextMessage, marshalled)
 
-	err = sendConnectedUsersUpdate(message.Room)
+	err = sendRoomUpdate(message.Room)
 	if err != nil {
 		return err
 	}
@@ -171,11 +241,17 @@ func handleRegistration(message *ClientMessage, connection *websocket.Conn) erro
 	return nil
 }
 
+var mutex sync.Mutex
+
 func handleConnection(conn *websocket.Conn) error {
 	_, msg, err := conn.ReadMessage()
 	if err != nil {
 		return err
 	}
+
+	// TODO: Do finer grained locking later. For now serialize message handling.
+	mutex.Lock()
+	defer mutex.Unlock()
 
 	var message ClientMessage
 	err = json.Unmarshal(msg, &message)
