@@ -114,7 +114,7 @@ type Room struct {
 	Story     UserStory
 }
 
-var rooms = make(map[string]Room)
+var rooms = make(map[string]*Room)
 
 func handleShowStory(message *ClientMessage, connection *websocket.Conn) error {
 	return fmt.Errorf("TODO: Write handleShowStory")
@@ -284,12 +284,12 @@ func register(message *ClientMessage, connection *websocket.Conn) RegistrationRe
 			StoryStages:        make([]UserStoryStage, 0),
 			ParticipatingUsers: make(map[string]bool),
 		}
-		rooms[message.Room] = Room{
-			Users:     make(map[string]User),
-			Story:     story,
-			RoomState: RoomStateLobby,
-		}
-		room = rooms[message.Room]
+
+		room = new(Room)
+		room.Users = make(map[string]User)
+		room.Story = story
+		room.RoomState = RoomStateLobby
+		rooms[message.Room] = room
 	}
 
 	// Make the new user the admin if he's the first to enter the room.
