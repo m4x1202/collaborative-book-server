@@ -43,6 +43,11 @@ var wsupgrader = websocket.Upgrader{
  * 	show_story(user name and stage to show the story from)
  */
 
+type ShowStoryPayload struct {
+	UserName string `json:"user_name"`
+	Stage    int    `json:"stage"`
+}
+
 type StartSessionPayload struct {
 	LastStage int `json:"last_stage"`
 }
@@ -122,7 +127,59 @@ type Room struct {
 var rooms = make(map[string]*Room)
 
 func handleShowStory(message *ClientMessage, connection *websocket.Conn) error {
-	return fmt.Errorf("TODO: Write handleShowStory")
+	room, ok := rooms[message.Room]
+	if !ok {
+		return fmt.Errorf("Tried to show story in room that does not exist: %s", message.Room)
+	}
+
+	// Make sure only the admin closes a room
+	user, ok := room.Users[message.UserName]
+	if !ok {
+		return fmt.Errorf("User that is not part of the room tried to show message: %s", message.UserName)
+	}
+	if !user.IsAdmin {
+		return fmt.Errorf("User that is not an admin tried to show a message: %s", message.UserName)
+	}
+
+	var payload ShowStoryPayload
+	err := json.Unmarshal([]byte(message.Payload), &payload)
+	if err != nil {
+		return err
+	}
+
+	if payload.Stage > room.Story.LastStage {
+		payload.Stage = room.Story.LastStage
+	}
+
+	stories := make([]string, 0)
+	submitter := payload.UserName
+	for i := 0; i < payload.Stage; i++ {
+		stage := room.Story.StoryStages[i]
+
+		// TODO: Fix logic here
+		text := stage.SubmittedStories[submitter]
+		submitter = stage.UserMapping[submitter]
+
+		stories = append(stories, text)
+	}
+
+	showStoryMessage := ShowStoryMessage{
+		MessageType: "show_story",
+		UserName:    payload.UserName,
+		Stories:     stories,
+	}
+
+	marshalled, err := json.Marshal(showStoryMessage)
+	if err != nil {
+		return err
+	}
+
+	// Tell each user to show the story of that user up to that stage
+	for _, user := range room.Users {
+		user.Connection.WriteMessage(websocket.TextMessage, marshalled)
+	}
+
+	return sendRoomUpdate(message.Room)
 }
 
 func handleCloseRoom(message *ClientMessage, connection *websocket.Conn) error {
@@ -144,12 +201,13 @@ func handleCloseRoom(message *ClientMessage, connection *websocket.Conn) error {
 		MessageType: "close_room",
 	}
 
+	marshalled, err := json.Marshal(closeMessage)
+	if err != nil {
+		return err
+	}
+
 	// Send close room message to each user
 	for _, user := range room.Users {
-		marshalled, err := json.Marshal(closeMessage)
-		if err != nil {
-			return err
-		}
 		user.Connection.WriteMessage(websocket.TextMessage, marshalled)
 	}
 
