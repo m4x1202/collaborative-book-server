@@ -126,7 +126,36 @@ func handleShowStory(message *ClientMessage, connection *websocket.Conn) error {
 }
 
 func handleCloseRoom(message *ClientMessage, connection *websocket.Conn) error {
-	return fmt.Errorf("TODO: Write handleCloseRoom")
+	room, ok := rooms[message.Room]
+	if !ok {
+		return fmt.Errorf("Tried to close room that does not exist: %s", message.Room)
+	}
+
+	// Make sure only the admin closes a room
+	user, ok := room.Users[message.UserName]
+	if !ok {
+		return fmt.Errorf("User that is not part of the room tried to close a room: %s", message.UserName)
+	}
+	if !user.IsAdmin {
+		return fmt.Errorf("User that is not an admin tried to close a room: %s", message.UserName)
+	}
+
+	closeMessage := CloseRoomMessage{
+		MessageType: "close_room",
+	}
+
+	// Send close room message to each user
+	for _, user := range room.Users {
+		marshalled, err := json.Marshal(closeMessage)
+		if err != nil {
+			return err
+		}
+		user.Connection.WriteMessage(websocket.TextMessage, marshalled)
+	}
+
+	// Remove room from list
+	rooms[message.Room] = nil
+	return nil
 }
 
 func handleStartSession(message *ClientMessage, connection *websocket.Conn) error {
