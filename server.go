@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"sync"
 
@@ -62,7 +63,7 @@ type Player struct {
 type RoomUpdateMessage struct {
 	MessageType string   `json:"type"` // room_update
 	UserList    []Player `json:"user_list"`
-	ShowLobby   bool     `json:"show_lobby"`
+	RoomState   int      `json:"room_state"` // lobby = 0, write_stories = 1, show_stories = 2
 }
 
 type RoundUpdateMessage struct {
@@ -86,12 +87,13 @@ type CloseRoomMessage struct {
 
 type UserStoryStage struct {
 	SubmittedStories map[string]string // Maps from user name to story
-	Stage            int
+	UserMapping      map[string]string // Maps from the user name that wrote the prior message to the user that is going to write this message
 }
 
 type UserStory struct {
 	StoryStages        []UserStoryStage
 	ParticipatingUsers map[string]bool
+	LastStage          int
 }
 
 type User struct {
@@ -127,7 +129,92 @@ func handleStartSession(message *ClientMessage, connection *websocket.Conn) erro
 }
 
 func handleSubmitStory(message *ClientMessage, connection *websocket.Conn) error {
-	return fmt.Errorf("TODO: Write handleSubmitStory")
+	room, ok := rooms[message.Room]
+	if !ok {
+		return fmt.Errorf("Tried to submit a story for room that does not exist: %s", message.Room)
+	}
+
+	// Make sure that the room is in the right state
+	if room.RoomState != RoomStateWriteStories {
+		return fmt.Errorf("Tried to submit a story for room that is currently not accepting stories: %s (Status: %v)", message.Room, room.RoomState)
+	}
+
+	// Make sure that the sender is participating in this round
+	_, ok = room.Story.ParticipatingUsers[message.UserName]
+	if !ok {
+		return fmt.Errorf("A user that is not participating in this round tried to submit a story: %s", message.UserName)
+	}
+
+	// Accept the story
+	last := &room.Story.StoryStages[len(room.Story.StoryStages)-1]
+	last.SubmittedStories[message.UserName] = message.Payload
+
+	// If this was the last story, we proceed to a new stage
+	participantsCount := len(room.Story.ParticipatingUsers)
+	submittedCount := len(last.SubmittedStories)
+
+	if participantsCount == submittedCount {
+		// Check if we've completed the story
+		if room.Story.LastStage == len(room.Story.StoryStages) {
+			// The story has been completed, show it.
+			room.RoomState = RoomStateShowStories
+		} else {
+			// Begin the next stage
+			room.Story.StoryStages = append(room.Story.StoryStages, UserStoryStage{
+				SubmittedStories: make(map[string]string),
+			})
+
+			// Send the last story part to every participating user
+			// At this point we know that the prior stage existed
+			prior := &room.Story.StoryStages[len(room.Story.StoryStages)-2]
+
+			participants := make([]string, len(room.Story.ParticipatingUsers))
+			idx := 0
+			for participant := range room.Story.ParticipatingUsers {
+				participants[idx] = participant
+				idx++
+			}
+
+			// Create a new permutation based on RNG
+			prime := 4447
+			// If we would map to the same index, we have to choose a different prime number
+			if (prime % participantsCount) == 0 {
+				prime = 7823
+			}
+			offset := rand.Intn(participantsCount)
+
+			last = &room.Story.StoryStages[len(room.Story.StoryStages)-1]
+			last.UserMapping = make(map[string]string)
+			for i := 0; i < participantsCount; i++ {
+				target := (i + offset + prime) % participantsCount
+				last.UserMapping[participants[i]] = participants[target]
+			}
+
+			// Send the old stories to the participating users
+			for participatingUser := range room.Story.ParticipatingUsers {
+
+				// Lookup the sender for the previous message
+				sender := last.UserMapping[participatingUser]
+				text := prior.SubmittedStories[sender]
+
+				updateMessage := RoundUpdateMessage{
+					MessageType:  "round_update",
+					CurrentStage: len(room.Story.StoryStages),
+					LastStage:    room.Story.LastStage,
+					Text:         text,
+				}
+
+				marshalled, err := json.Marshal(updateMessage)
+				if err != nil {
+					return err
+				}
+
+				user := room.Users[participatingUser]
+				user.Connection.WriteMessage(websocket.TextMessage, marshalled)
+			}
+		}
+	}
+	return sendRoomUpdate(message.Room) // Something changed in this room so we immediately send an update
 }
 
 func sendRoomUpdate(roomName string) error {
@@ -139,7 +226,7 @@ func sendRoomUpdate(roomName string) error {
 
 	message := RoomUpdateMessage{
 		MessageType: "room_update",
-		ShowLobby:   room.RoomState == RoomStateLobby,
+		RoomState:   room.RoomState,
 		UserList:    make([]Player, 0),
 	}
 
