@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sync"
 
@@ -12,20 +13,16 @@ import (
 )
 
 func main() {
+	// serve static files
 	client := gin.Default()
-
-	// serve static files under localhost:8080/assets - this is for css and js
 	client.Static("/", "./client")
+	go client.Run(":8080")
 
-	go client.Run(":8080") // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
-
+	// websocket
 	server := gin.Default()
-
-	// serve the client websocket
 	server.GET("/", func(c *gin.Context) {
-		go wshandler(c.Writer, c.Request)
+		go handleWebsocket(c.Writer, c.Request)
 	})
-
 	server.Run(":8081")
 }
 
@@ -108,7 +105,45 @@ func debugPrintOpenConnections() {
 	}
 }
 
-func register(message *ClientMessage, connection *websocket.Conn) (RegistrationResult, error) {
+func handleShowStory(message *ClientMessage, connection *websocket.Conn) error {
+	return fmt.Errorf("TODO: Write handleShowStory")
+}
+
+func handleCloseRoom(message *ClientMessage, connection *websocket.Conn) error {
+	return fmt.Errorf("TODO: Write handleCloseRoom")
+}
+
+func handleStartSession(message *ClientMessage, connection *websocket.Conn) error {
+	return fmt.Errorf("TODO: Write handleStartSession")
+}
+
+func handleSubmitStory(message *ClientMessage, connection *websocket.Conn) error {
+	return fmt.Errorf("TODO: Write handleSubmitStory")
+}
+
+func sendConnectedUsersUpdate(room string) error {
+	message := RoomUpdateMessage{
+		MessageType: "user_update",
+	}
+
+	// TODO set is_admin true for first user
+	for userName := range openConnections[room] {
+		message.UserList = append(message.UserList, Player{UserName: userName})
+	}
+
+	marshalled, err := json.Marshal(message)
+	if err != nil {
+		return err
+	}
+
+	for _, connection := range openConnections[room] {
+		connection.WriteMessage(websocket.TextMessage, marshalled)
+	}
+
+	return nil
+}
+
+func register(message *ClientMessage, connection *websocket.Conn) RegistrationResult {
 
 	openConnectionMutex.Lock()
 	defer openConnectionMutex.Unlock()
@@ -126,36 +161,71 @@ func register(message *ClientMessage, connection *websocket.Conn) (RegistrationR
 		MessageType: "registration",
 		Result:      "success",
 	}
-	return result, nil
+	return result
 }
 
-func submitStory(message *ClientMessage) {
-
-}
-
-func sendConnectedUsersUpdate(messageType int, room string) error {
-	message := RoomUpdateMessage{
-		MessageType: "user_update",
-	}
-
-	// TODO set is_admin true for first user
-	for userName := range openConnections[room] {
-		message.UserList = append(message.UserList, Player{UserName: userName})
-	}
-
-	marshalled, err := json.Marshal(message)
+func handleRegistration(message *ClientMessage, connection *websocket.Conn) error {
+	result := register(message, connection)
+	marshalled, err := json.Marshal(result)
 	if err != nil {
 		return err
 	}
 
-	for _, connection := range openConnections[room] {
-		connection.WriteMessage(messageType, marshalled)
+	connection.WriteMessage(websocket.TextMessage, marshalled)
+
+	err = sendConnectedUsersUpdate(message.Room)
+	if err != nil {
+		return err
 	}
 
 	return nil
 }
 
-func wshandler(w http.ResponseWriter, r *http.Request) {
+func handleConnection(conn *websocket.Conn) error {
+	_, msg, err := conn.ReadMessage()
+	if err != nil {
+		return err
+	}
+
+	var message ClientMessage
+	err = json.Unmarshal(msg, &message)
+	if err != nil {
+		return err
+	}
+
+	switch message.MessageType {
+	case "registration":
+		err = handleRegistration(&message, conn)
+		if err != nil {
+			return err
+		}
+	case "submit_story":
+		err = handleSubmitStory(&message, conn)
+		if err != nil {
+			return err
+		}
+	case "start_session":
+		err = handleStartSession(&message, conn)
+		if err != nil {
+			return err
+		}
+	case "close_room":
+		err = handleCloseRoom(&message, conn)
+		if err != nil {
+			return err
+		}
+	case "show_story":
+		err = handleShowStory(&message, conn)
+		if err != nil {
+			return err
+		}
+	default:
+		log.Error("Encountered unsupported message type %s", message.MessageType)
+	}
+	return nil
+}
+
+func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := wsupgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Error(err)
@@ -163,50 +233,10 @@ func wshandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for {
-		t, msg, err := conn.ReadMessage()
-		if err != nil {
-			break
-		}
-
-		log.Print("In Loop")
-
-		var message ClientMessage
-		err = json.Unmarshal(msg, &message)
+		err = handleConnection(conn)
 		if err != nil {
 			log.Error(err)
 			return
 		}
-
-		switch message.MessageType {
-		case "registration":
-			result, err := register(&message, conn)
-			if err != nil {
-				log.Error(err)
-				return
-			}
-
-			marshalled, err := json.Marshal(result)
-			if err != nil {
-				log.Error(err)
-				return
-			}
-
-			conn.WriteMessage(t, marshalled)
-
-			err = sendConnectedUsersUpdate(t, message.Room)
-			if err != nil {
-				log.Error(err)
-				return
-			}
-
-		case "submit_story":
-			submitStory(&message)
-
-			// Use conn to send and receive messages.
-			conn.WriteMessage(t, msg)
-		}
 	}
-
-	log.Print("End")
-
 }
