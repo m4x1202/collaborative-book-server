@@ -27,12 +27,6 @@ func main() {
 	server.Run(":8081")
 }
 
-var wsupgrader = websocket.Upgrader{
-	CheckOrigin:     func(r *http.Request) bool { return true },
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-}
-
 /// BEGIN Server/Client Interface
 
 /**
@@ -531,6 +525,12 @@ func handleConnection(conn *websocket.Conn) error {
 	return nil
 }
 
+var wsupgrader = websocket.Upgrader{
+	CheckOrigin:     func(r *http.Request) bool { return true },
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+}
+
 func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := wsupgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -542,7 +542,9 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 		err = handleConnection(conn)
 		if err != nil {
 			log.Error(err)
-			return
+			break
 		}
 	}
+
+	conn.Close()
 }
