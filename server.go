@@ -92,7 +92,7 @@ type CloseRoomMessage struct {
 
 type UserStoryStage struct {
 	SubmittedStories map[string]string // Maps from user name to story
-	UserMapping      map[string]string // Maps from the user name that wrote the prior message to the user that is going to write this message
+	UserMapping      map[string]string // Maps from the user name that wrote the original stage to the user that is going to write the text for this stage
 }
 
 type UserStory struct {
@@ -121,6 +121,13 @@ type Room struct {
 
 var rooms = make(map[string]*Room)
 
+func getTextOfStage(room *Room, ownerUserName string, stageIndex int) string {
+
+	stage := &room.Story.StoryStages[stageIndex]
+	writerName := stage.UserMapping[ownerUserName]
+	return stage.SubmittedStories[writerName]
+}
+
 func handleShowStory(message *ClientMessage, connection *websocket.Conn) error {
 	room, ok := rooms[message.Room]
 	if !ok {
@@ -147,15 +154,9 @@ func handleShowStory(message *ClientMessage, connection *websocket.Conn) error {
 	}
 
 	stories := make([]string, 0)
-	submitter := payload.UserName
+	owner := payload.UserName
 	for i := 0; i < payload.Stage; i++ {
-		stage := room.Story.StoryStages[i]
-
-		// TODO: Fix logic here
-		text := stage.SubmittedStories[submitter]
-		submitter = stage.UserMapping[submitter]
-
-		stories = append(stories, text)
+		stories = append(stories, getTextOfStage(room, owner, i))
 	}
 
 	showStoryMessage := ShowStoryMessage{
@@ -330,19 +331,28 @@ func handleSubmitStory(message *ClientMessage, connection *websocket.Conn) error
 			}
 			offset := rand.Intn(participantsCount)
 
+			oldSubmitterToNewSubmitterMapping := make(map[string]string)
+			for i, oldSubmitter := range participants {
+				newSubmitterIndex := (i + offset + prime) % participantsCount
+				newSubmitter := participants[newSubmitterIndex]
+				oldSubmitterToNewSubmitterMapping[oldSubmitter] = newSubmitter
+			}
+
 			last = &room.Story.StoryStages[len(room.Story.StoryStages)-1]
 			last.UserMapping = make(map[string]string)
-			for i := 0; i < participantsCount; i++ {
-				target := (i + offset + prime) % participantsCount
-				last.UserMapping[participants[i]] = participants[target]
+			for _, owner := range participants {
+				oldSubmitter := prior.UserMapping[owner]
+				newSubmitter := oldSubmitterToNewSubmitterMapping[oldSubmitter]
+				last.UserMapping[owner] = newSubmitter
 			}
 
 			// Send the old stories to the participating users
-			for participatingUser := range room.Story.ParticipatingUsers {
+			for _, owner := range participants {
+				text := getTextOfStage(room, owner, len(room.Story.StoryStages)-2)
 
-				// Lookup the sender for the previous message
-				sender := last.UserMapping[participatingUser]
-				text := prior.SubmittedStories[sender]
+				// Find out who is going to write the next stage of the owners story
+				receiverUserName := last.UserMapping[owner]
+				receiver := room.Users[receiverUserName]
 
 				updateMessage := RoundUpdateMessage{
 					MessageType:  "round_update",
@@ -356,8 +366,7 @@ func handleSubmitStory(message *ClientMessage, connection *websocket.Conn) error
 					return err
 				}
 
-				user := room.Users[participatingUser]
-				user.Connection.WriteMessage(websocket.TextMessage, marshalled)
+				receiver.Connection.WriteMessage(websocket.TextMessage, marshalled)
 			}
 		}
 	}
