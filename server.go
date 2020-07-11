@@ -15,9 +15,9 @@ import (
 
 func main() {
 	// serve static files
-	client := gin.Default()
+	/*client := gin.Default()
 	client.Static("/", "./client")
-	go client.Run(":8080")
+	go client.Run(":8080")*/
 
 	// websocket
 	server := gin.Default()
