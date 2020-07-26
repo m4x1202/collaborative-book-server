@@ -560,7 +560,7 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 		err = handleConnection(conn)
 		if err != nil {
 			log.Error(err)
-			break
+			return
 		}
 	}
 }
