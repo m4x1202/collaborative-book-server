@@ -548,6 +548,11 @@ var wsupgrader = websocket.Upgrader{
 }
 
 func handleWebsocket(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Warnf("Recovered in handleWebsocket: %v", r)
+		}
+	}()
 	conn, err := wsupgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Error(err)
