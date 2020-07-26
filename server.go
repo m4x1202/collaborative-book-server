@@ -554,6 +554,8 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	defer conn.Close()
+
 	for {
 		err = handleConnection(conn)
 		if err != nil {
@@ -561,6 +563,4 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-
-	conn.Close()
 }
