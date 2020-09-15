@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -14,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/apigatewaymanagementapi"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
+	"github.com/aws/aws-sdk-go/service/dynamodb/expression"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/gorilla/websocket"
@@ -22,6 +24,8 @@ import (
 const (
 	AWSRegion          = "eu-central-1"
 	APIGatewayEndpoint = "r8sc9tucc2.execute-api.eu-central-1.amazonaws.com/dev"
+	DynamoDBTable      = "collaborative-book-connections"
+	DefaultRoomName    = "unknown"
 )
 
 func main() {
@@ -39,8 +43,8 @@ func main() {
 
 	// serve static files
 	/*client := gin.Default()
-	client.Static("/", "./client")
-	go client.Run(":8080")*/
+	  client.Static("/", "./client")
+	  go client.Run(":8080")*/
 
 	// websocket
 	//server := gin.Default()
@@ -51,6 +55,18 @@ func main() {
 }
 
 /// BEGIN Server/Client Interface
+
+type MessageType string
+
+const (
+	Registration MessageType = "registration"
+	StartSession MessageType = "start_session"
+	CloseRoom    MessageType = "close_room"
+	SubmitStory  MessageType = "submit_story"
+	ShowStory    MessageType = "show_story"
+	RoomUmdate   MessageType = "room_update"
+	RoundUpdate  MessageType = "round_update"
+)
 
 // Client
 
@@ -63,10 +79,10 @@ func main() {
  * 	show_story(user name and stage to show the story from)
  */
 type ClientMessage struct {
-	MessageType string `json:"type"` // registration, start_session, close_room, submit_story, show_story
-	Room        string `json:"room"`
-	UserName    string `json:"name"`
-	Payload     string `json:"payload"`
+	MessageType MessageType `json:"type"` // registration, start_session, close_room, submit_story, show_story
+	Room        string      `json:"room"`
+	UserName    string      `json:"name"`
+	Payload     string      `json:"payload"`
 }
 
 //Server
@@ -80,9 +96,16 @@ type StartSessionPayload struct {
 	LastStage int `json:"last_stage"`
 }
 
+type RegistrationResultString string
+
+const (
+	Success RegistrationResultString = "success"
+	Failure RegistrationResultString = "failure"
+)
+
 type RegistrationResult struct {
-	MessageType string `json:"type"` // registration
-	Result      string `json:"result"`
+	MessageType MessageType              `json:"type"` // registration
+	Result      RegistrationResultString `json:"result"`
 }
 
 type UserStatus int
@@ -93,6 +116,7 @@ const (
 	Submitted
 )
 
+type PlayerList []Player
 type Player struct {
 	UserName string     `json:"user_name"`
 	Status   UserStatus `json:"status"` // waiting, writing, submitted
@@ -100,26 +124,26 @@ type Player struct {
 }
 
 type RoomUpdateMessage struct {
-	MessageType string    `json:"type"` // room_update
-	UserList    []Player  `json:"user_list"`
-	RoomState   RoomState `json:"room_state"` // lobby = 0, write_stories = 1, show_stories = 2
+	MessageType MessageType `json:"type"` // room_update
+	UserList    PlayerList  `json:"user_list"`
+	RoomState   RoomState   `json:"room_state"` // lobby = 0, write_stories = 1, show_stories = 2
 }
 
 type RoundUpdateMessage struct {
-	MessageType  string `json:"type"` // round_update
-	CurrentStage int    `json:"current_stage"`
-	LastStage    int    `json:"last_stage"`
-	Text         string `json:"text"`
+	MessageType  MessageType `json:"type"` // round_update
+	CurrentStage int         `json:"current_stage"`
+	LastStage    int         `json:"last_stage"`
+	Text         string      `json:"text"`
 }
 
 type ShowStoryMessage struct {
-	MessageType string   `json:"type"` // show_story
-	UserName    string   `json:"user_name"`
-	Stories     []string `json:"stories"`
+	MessageType MessageType `json:"type"` // show_story
+	UserName    string      `json:"user_name"`
+	Stories     []string    `json:"stories"`
 }
 
 type CloseRoomMessage struct {
-	MessageType string `json:"type"` // close_room
+	MessageType MessageType `json:"type"` // close_room
 }
 
 /// END Server/Client Interface
@@ -155,6 +179,7 @@ type Room struct {
 	Story     UserStory
 }
 
+type PlayerItemList []*PlayerItem
 type PlayerItem struct {
 	Room          string         `json:"room" dynamodbav:"room"`
 	ConnectionID  string         `json:"connectionId" dynamodbav:"connectionId"`
@@ -166,6 +191,67 @@ type PlayerItem struct {
 	Spectating    bool           `json:"spectating" dynamodbav:"spectating"`
 	Contributions map[int]string `json:"contributions" dynamodbav:"contributions"`
 	Participants  map[int]string `json:"participants" dynamodbav:"participants"`
+	LastActivity  int64          `json:"last_activity" dynamodbav:"last_activity"`
+}
+
+func playerItemListToPlayerList(playerItems PlayerItemList) PlayerList {
+	var players PlayerList
+	for _, playerItem := range playerItems {
+		players = append(players, Player{
+			UserName: playerItem.UserName,
+			Status:   playerItem.Status,
+			IsAdmin:  playerItem.IsAdmin,
+		})
+	}
+	return players
+}
+
+func marshalPlayerKey(player PlayerItem) map[string]*dynamodb.AttributeValue {
+	return map[string]*dynamodb.AttributeValue{
+		"room": {
+			S: aws.String(player.Room),
+		},
+		"connectionId": {
+			S: aws.String(player.ConnectionID),
+		},
+	}
+}
+
+func updateDynamoDBPlayerItem(db *dynamodb.DynamoDB, player PlayerItem) error {
+	marshaledPlayer, err := dynamodbattribute.MarshalMap(player)
+	if err != nil {
+		return err
+	}
+	var updateExpression expression.UpdateBuilder
+	for name, value := range marshaledPlayer {
+		if name == "room" || name == "connectionId" {
+			continue
+		}
+		updateExpression = updateExpression.Set(
+			expression.Name(name),
+			expression.IfNotExists(expression.Name(name), expression.Value(value)),
+		)
+	}
+	expr, err := expression.NewBuilder().
+		WithUpdate(updateExpression).
+		Build()
+	if err != nil {
+		return err
+	}
+
+	updateItemInput := &dynamodb.UpdateItemInput{
+		TableName:                 aws.String(DynamoDBTable),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		Key:                       marshalPlayerKey(player),
+		UpdateExpression:          expr.Update(),
+	}
+
+	_, err = db.UpdateItem(updateItemInput)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // Handler is the base handler that will receive all web socket request
@@ -201,22 +287,48 @@ func Handler(request events.APIGatewayWebsocketProxyRequest) (response interface
 	return
 }
 
+func getTTLTime() int64 {
+	return time.Now().AddDate(0, 0, 1).Unix()
+}
+
+func postToConnection(connectionID string, sess *session.Session, data interface{}) error {
+	marshalled, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	input := &apigatewaymanagementapi.PostToConnectionInput{
+		ConnectionId: aws.String(connectionID),
+		Data:         marshalled,
+	}
+
+	apigateway := apigatewaymanagementapi.New(sess, aws.NewConfig().WithEndpoint(APIGatewayEndpoint))
+
+	_, err = apigateway.PostToConnection(input)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Connect will receive the $connect request
 func Connect(request events.APIGatewayWebsocketProxyRequest) error {
 	log.Debug("[Connect] - Method called")
 	playerItem := PlayerItem{
-		Room:         "unknown",
+		Room:         DefaultRoomName,
 		ConnectionID: request.RequestContext.ConnectionID,
+		LastActivity: getTTLTime(),
 	}
-	attributeValues, err := dynamodbattribute.MarshalMap(playerItem)
+	/*attributeValues, err := dynamodbattribute.MarshalMap(playerItem)
 	if err != nil {
 		return err
 	}
 
 	putItemInput := &dynamodb.PutItemInput{
-		TableName: aws.String("collaborative-book-connections"),
+		TableName: aws.String(DynamoDBTable),
 		Item:      attributeValues,
-	}
+	}*/
 
 	sess, err := session.NewSession(&aws.Config{
 		Region: aws.String(AWSRegion),
@@ -226,7 +338,11 @@ func Connect(request events.APIGatewayWebsocketProxyRequest) error {
 	}
 	db := dynamodb.New(sess)
 
-	_, err = db.PutItem(putItemInput)
+	/*_, err = db.PutItem(putItemInput)
+		if err != nil {
+			return err
+	    }*/
+	err = updateDynamoDBPlayerItem(db, playerItem)
 	if err != nil {
 		return err
 	}
@@ -240,7 +356,7 @@ func Connect(request events.APIGatewayWebsocketProxyRequest) error {
 func Disconnect(request events.APIGatewayWebsocketProxyRequest) error {
 	log.Debug("[Disconnect] - Method called")
 	scanInput := &dynamodb.ScanInput{
-		TableName:            aws.String("collaborative-book-connections"),
+		TableName:            aws.String(DynamoDBTable),
 		ProjectionExpression: aws.String("room"),
 		FilterExpression:     aws.String("connectionId = :cid"),
 		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
@@ -275,7 +391,7 @@ func Disconnect(request events.APIGatewayWebsocketProxyRequest) error {
 	log.Debugf("Player with connectionId %s is in room %s", request.RequestContext.ConnectionID, room)
 
 	deleteItemInput := &dynamodb.DeleteItemInput{
-		TableName: aws.String("collaborative-book-connections"),
+		TableName: aws.String(DynamoDBTable),
 		Key: map[string]*dynamodb.AttributeValue{
 			"room": {
 				S: aws.String(room),
@@ -289,7 +405,7 @@ func Disconnect(request events.APIGatewayWebsocketProxyRequest) error {
 	if err != nil {
 		return err
 	}
-	log.Info("Player with connectionId %s removed from DynamoDB", request.RequestContext.ConnectionID)
+	log.Infof("Player with connectionId %s removed from DynamoDB", request.RequestContext.ConnectionID)
 
 	log.Debug("[Disconnect] - Method successfully finished")
 	return nil
@@ -305,12 +421,12 @@ func Default(request events.APIGatewayWebsocketProxyRequest) error {
 		return err
 	}
 	log.Tracef("Client message received: %v", b)
-	if b.Room == "unknown" {
-		return fmt.Errorf("Room cannot be 'unknown'. This is a reserved room name")
+	if b.Room == DefaultRoomName {
+		return fmt.Errorf("Room cannot be '%s'. This is a reserved room name", DefaultRoomName)
 	}
 
 	queryInput := &dynamodb.QueryInput{
-		TableName:              aws.String("collaborative-book-connections"),
+		TableName:              aws.String(DynamoDBTable),
 		KeyConditionExpression: aws.String("room = :r"),
 		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 			":r": {
@@ -333,30 +449,30 @@ func Default(request events.APIGatewayWebsocketProxyRequest) error {
 	}
 	log.Tracef("Query output: %v", *queryOutput)
 
-	players := make(map[string]PlayerItem, aws.Int64Value(queryOutput.Count))
+	var players PlayerItemList
 	for _, i := range queryOutput.Items {
-		var player PlayerItem
+		player := &PlayerItem{}
 		if err := dynamodbattribute.UnmarshalMap(i, player); err != nil {
 			log.Error(err)
 			continue
 		}
-		players[player.UserName] = player
+		players = append(players, player)
 	}
 	log.Debugf("Players in room %s: %v", b.Room, players)
 
 	switch b.MessageType {
-	case "registration":
+	case Registration:
 		err = handleRegistration(sess, request.RequestContext.ConnectionID, b, players)
-	case "submit_story":
+	case SubmitStory:
 		//err = handleSubmitStory(b, &conn)
-	case "start_session":
+	case StartSession:
 		//err = handleStartSession(b, &conn)
-	case "close_room":
+	case CloseRoom:
 		//err = handleCloseRoom(b, &conn)
-	case "show_story":
+	case ShowStory:
 		//err = handleShowStory(b, &conn)
 	default:
-		log.Error("Encountered unsupported message type %s", b.MessageType)
+		log.Errorf("Encountered unsupported message type %s", b.MessageType)
 	}
 	if err != nil {
 		return err
@@ -366,160 +482,107 @@ func Default(request events.APIGatewayWebsocketProxyRequest) error {
 	return nil
 }
 
-func register(sess *session.Session, connectionID string, message ClientMessage, players map[string]PlayerItem) error {
-	scanInput := &dynamodb.ScanInput{
-		TableName:        aws.String("collaborative-book-connections"),
-		FilterExpression: aws.String("connectionId = :cid"),
-		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-			":cid": {
+func register(db *dynamodb.DynamoDB, connectionID string, message ClientMessage, players PlayerItemList) (PlayerItemList, error) {
+	player := &PlayerItem{
+		Room:         message.Room,
+		ConnectionID: connectionID,
+		UserName:     message.UserName,
+	}
+	log.Debugf("Player trying to register: %v", player)
+
+	var err error
+	playerExists := false
+	for _, existingPlayer := range players {
+		if existingPlayer.UserName != player.UserName {
+			continue
+		}
+		playerExists = true
+		log.Debugf("Existing Player in room: %v", existingPlayer)
+		oldConnectionID := existingPlayer.ConnectionID
+		existingPlayer.ConnectionID = player.ConnectionID
+		existingPlayer.LastActivity = getTTLTime()
+		err = updateDynamoDBPlayerItem(db, *existingPlayer)
+		if err != nil {
+			return nil, err
+		}
+		deleteItemInput := &dynamodb.DeleteItemInput{
+			TableName: aws.String(DynamoDBTable),
+			Key: map[string]*dynamodb.AttributeValue{
+				"room": {
+					S: aws.String(player.Room),
+				},
+				"connectionId": {
+					S: aws.String(oldConnectionID),
+				},
+			},
+		}
+		_, err = db.DeleteItem(deleteItemInput)
+		if err != nil {
+			return nil, err
+		}
+		log.Debugf("Old connectionId %s of player %s in room %s deleted after reconnect", oldConnectionID, player.UserName, player.Room)
+	}
+	if !playerExists {
+		if len(players) == 0 {
+			log.Infof("Player %s creates new room %s and will therefore be admin", player.UserName, player.Room)
+			player.IsAdmin = true
+		}
+		player.LastActivity = getTTLTime()
+		err = updateDynamoDBPlayerItem(db, *player)
+		if err != nil {
+			return nil, err
+		}
+		players = append(players, player)
+	}
+	log.Infof("Player with connectionId %s successfully registered and assigned to room:username (%s:%s)", connectionID, player.Room, player.UserName)
+
+	deleteItemInput := &dynamodb.DeleteItemInput{
+		TableName: aws.String(DynamoDBTable),
+		Key: map[string]*dynamodb.AttributeValue{
+			"room": {
+				S: aws.String(DefaultRoomName),
+			},
+			"connectionId": {
 				S: aws.String(connectionID),
 			},
 		},
 	}
-
-	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String(AWSRegion),
-	})
+	_, err = db.DeleteItem(deleteItemInput)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	db := dynamodb.New(sess)
+	log.Debugf("Item with connectionId %s and %s room deleted", connectionID, DefaultRoomName)
 
-	scanOutput, err := db.Scan(scanInput)
-	if err != nil {
-		return err
-	}
-	log.Tracef("Scan output: %v", scanOutput)
-	if aws.Int64Value(scanOutput.Count) > 1 {
-		return fmt.Errorf("More than one player with this connectionId")
-	}
-
-	var player PlayerItem
-	err = dynamodbattribute.UnmarshalMap(scanOutput.Items[0], &player)
-	if err != nil {
-		return err
-	}
-	log.Debugf("Player trying to register: %v", player)
-
-	update := &dynamodb.UpdateItemInput{
-		TableName:    aws.String("collaborative-book-connections"),
-		ReturnValues: aws.String("UPDATED_NEW"),
-	}
-
-	updateExpression := "set connectionId = :cid, user_name = :u, room = :r"
-	expressionAV := map[string]*dynamodb.AttributeValue{
-		":u": {
-			S: aws.String(message.UserName),
-		},
-		":r": {
-			S: aws.String(message.Room),
-		},
-		":cid": {
-			S: aws.String(connectionID),
-		},
-	}
-	if existingPlayer, ok := players[message.UserName]; ok {
-		log.Debugf("Existing Player in room: %v", existingPlayer)
-		marshalledExistingPlayer, err := dynamodbattribute.MarshalMap(existingPlayer)
-		if err != nil {
-			return err
-		}
-		update.SetKey(marshalledExistingPlayer)
-	} else {
-		update.SetKey(scanOutput.Items[0])
-		if len(players) == 0 {
-			log.Infof("Player %s creates new room %s and will therefore be admin", message.UserName, message.Room)
-			updateExpression += ", is_admin = :a"
-			expressionAV[":a"] = &dynamodb.AttributeValue{BOOL: aws.Bool(true)}
-		}
-	}
-	update.SetUpdateExpression(updateExpression)
-	update.SetExpressionAttributeValues(expressionAV)
-
-	_, err = db.UpdateItem(update)
-	if err != nil {
-		return err
-	}
-	log.Info("Player with connectionId %s successfully registered and assigned to room:username (%s:%s)", connectionID, message.Room, message.UserName)
-
-	if _, ok := players[message.UserName]; ok {
-		delete := &dynamodb.DeleteItemInput{
-			TableName: aws.String("collaborative-book-connections"),
-			Key:       scanOutput.Items[0],
-		}
-		_, err = db.DeleteItem(delete)
-		if err != nil {
-			return err
-		}
-		log.Debugf("Item with connectionId %s deleted since already existing player got overwritten", connectionID)
-	}
-
-	/*room, ok := rooms[message.Room]
-	if !ok {
-		story := UserStory{
-			StoryStages:        make([]UserStoryStage, 0),
-			ParticipatingUsers: make(map[string]bool),
-		}
-
-		room = new(Room)
-		room.Users = make(map[string]User)
-		room.Story = story
-		room.RoomState = RoomStateLobby
-		rooms[message.Room] = room
-	}
-
-	// Make the new user the admin if he's the first to enter the room.
-	isAdmin := len(room.Users) == 0
-
-	// Add a user to the room. Overwrite with new connection if the user already existed.
-	room.Users[message.UserName] = User{
-		Name:       message.UserName,
-		Connection: connection,
-		IsAdmin:    isAdmin,
-	}
-
-	log.Printf("Registered user %s in room %s", message.UserName, message.Room)*/
-
-	return nil
+	return players, nil
 }
 
-func handleRegistration(sess *session.Session, connectionID string, message ClientMessage, players map[string]PlayerItem) error {
+func handleRegistration(sess *session.Session, connectionID string, message ClientMessage, players PlayerItemList) error {
 	result := RegistrationResult{
-		MessageType: "registration",
-		Result:      "success",
+		MessageType: Registration,
+		Result:      Success,
 	}
-	err := register(sess, connectionID, message, players)
+
+	players, err := register(dynamodb.New(sess), connectionID, message, players)
 	if err != nil {
 		log.Error(err)
-		result.Result = "failure"
+		result.Result = Failure
 	}
+	log.Infof("Player %s successfully registrered in room %s", message.UserName, message.Room)
 
-	marshalled, err := json.Marshal(result)
+	err = postToConnection(connectionID, sess, result)
 	if err != nil {
 		return err
 	}
 
-	input := &apigatewaymanagementapi.PostToConnectionInput{
-		ConnectionId: aws.String(connectionID),
-		Data:         marshalled,
-	}
-
-	apigateway := apigatewaymanagementapi.New(sess, aws.NewConfig().WithEndpoint(APIGatewayEndpoint))
-
-	_, err = apigateway.PostToConnection(input)
-	if err != nil {
-		return err
-	}
-
-	if result.Result == "failure" {
+	if result.Result == Failure {
 		log.Warnf("Not sending room update for registration of connection (%s) due to error", connectionID)
 		return nil
 	}
 
-	//err = sendRoomUpdate(message.Room)
-	//if err != nil {
-	//	return err
-	//}
+	err = sendRoomUpdate(sess, players)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -565,7 +628,7 @@ func handleShowStory(message *ClientMessage, connection *websocket.Conn) error {
 	}
 
 	showStoryMessage := ShowStoryMessage{
-		MessageType: "show_story",
+		MessageType: ShowStory,
 		UserName:    payload.UserName,
 		Stories:     stories,
 	}
@@ -580,7 +643,7 @@ func handleShowStory(message *ClientMessage, connection *websocket.Conn) error {
 		user.Connection.WriteMessage(websocket.TextMessage, marshalled)
 	}
 
-	return sendRoomUpdate(message.Room)
+	return nil //sendRoomUpdate(message.Room)
 }
 
 func handleCloseRoom(message *ClientMessage, connection *websocket.Conn) error {
@@ -599,7 +662,7 @@ func handleCloseRoom(message *ClientMessage, connection *websocket.Conn) error {
 	}
 
 	closeMessage := CloseRoomMessage{
-		MessageType: "close_room",
+		MessageType: CloseRoom,
 	}
 
 	marshalled, err := json.Marshal(closeMessage)
@@ -663,7 +726,7 @@ func handleStartSession(message *ClientMessage, connection *websocket.Conn) erro
 
 		text := "Start typing your story!"
 		updateMessage := RoundUpdateMessage{
-			MessageType:  "round_update",
+			MessageType:  RoundUpdate,
 			CurrentStage: len(room.Story.StoryStages),
 			LastStage:    room.Story.LastStage,
 			Text:         text,
@@ -678,7 +741,7 @@ func handleStartSession(message *ClientMessage, connection *websocket.Conn) erro
 		user.Connection.WriteMessage(websocket.TextMessage, marshalled)
 	}
 
-	return sendRoomUpdate(message.Room)
+	return nil //sendRoomUpdate(message.Room)
 }
 
 func handleSubmitStory(message *ClientMessage, connection *websocket.Conn) error {
@@ -767,7 +830,7 @@ func handleSubmitStory(message *ClientMessage, connection *websocket.Conn) error
 				receiver := room.Users[receiverUserName]
 
 				updateMessage := RoundUpdateMessage{
-					MessageType:  "round_update",
+					MessageType:  RoundUpdate,
 					CurrentStage: len(room.Story.StoryStages),
 					LastStage:    room.Story.LastStage,
 					Text:         text,
@@ -782,64 +845,32 @@ func handleSubmitStory(message *ClientMessage, connection *websocket.Conn) error
 			}
 		}
 	}
-	return sendRoomUpdate(message.Room) // Something changed in this room so we immediately send an update
+	return nil //sendRoomUpdate(message.Room) // Something changed in this room so we immediately send an update
 }
 
-func sendRoomUpdate(roomName string) error {
-
-	room, ok := rooms[roomName]
-	if !ok {
-		return fmt.Errorf("Tried to send update for room that does not exist: %s", roomName)
+func sendRoomUpdate(sess *session.Session, playerItems PlayerItemList) error {
+	if len(playerItems) == 0 {
+		return fmt.Errorf("Tried to send update for room that does not exist")
 	}
 
 	message := RoomUpdateMessage{
-		MessageType: "room_update",
-		RoomState:   room.RoomState,
-		UserList:    make([]Player, 0),
+		MessageType: RoomUmdate,
+		RoomState:   playerItems[0].RoomState,
+		UserList:    playerItemListToPlayerList(playerItems),
 	}
 
-	// Create the player for each connected user
-	for _, user := range room.Users {
+	log.Debugf("Sending room update to room %s: %v", playerItems[0].Room, message)
 
-		status := Waiting // default state in lobby or during show stories
-
-		// if round is going on and the user is in the participating users
-		if room.RoomState == WriteStories {
-
-			// check if the user takes part in this round
-			_, ok := room.Story.ParticipatingUsers[user.Name]
-			if ok {
-				// find last entry into the story stages
-				last := room.Story.StoryStages[len(room.Story.StoryStages)-1]
-
-				_, ok := last.SubmittedStories[user.Name]
-				if ok {
-					// if the user has something submitted already
-					status = Submitted
-				} else {
-					// if the user has not submitted a story yet
-					status = Writing
-				}
-			}
-		}
-
-		player := Player{
-			UserName: user.Name,
-			IsAdmin:  user.IsAdmin,
-			Status:   status,
-		}
-
-		message.UserList = append(message.UserList, player)
-	}
-
-	marshalled, err := json.Marshal(message)
-	if err != nil {
-		return err
-	}
-
+	var errors []error
 	// Send the room update to every user in the room
-	for _, user := range room.Users {
-		user.Connection.WriteMessage(websocket.TextMessage, marshalled)
+	for _, player := range playerItems {
+		err := postToConnection(player.ConnectionID, sess, message)
+		if err != nil {
+			errors = append(errors, err)
+		}
+	}
+	if len(errors) > 0 {
+		return fmt.Errorf("%v", errors)
 	}
 
 	return nil
