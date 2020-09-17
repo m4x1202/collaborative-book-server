@@ -1,10 +1,7 @@
 package cb
 
 const (
-	AWSRegion          = "eu-central-1"
-	APIGatewayEndpoint = "r8sc9tucc2.execute-api.eu-central-1.amazonaws.com/dev"
-	DynamoDBTable      = "collaborative-book-connections"
-	DefaultRoomName    = "unknown"
+	DefaultRoomName = "unknown"
 )
 
 type RoomState int
@@ -111,7 +108,6 @@ type CloseRoomMessage struct {
 
 /// DynamoDB item
 
-type PlayerItemList []*PlayerItem
 type PlayerItem struct {
 	Room          string         `json:"room" dynamodbav:"room"`
 	ConnectionID  string         `json:"connectionId" dynamodbav:"connectionId"`
@@ -124,4 +120,55 @@ type PlayerItem struct {
 	Contributions map[int]string `json:"contributions" dynamodbav:"contributions"`
 	Participants  map[int]string `json:"participants" dynamodbav:"participants"`
 	LastActivity  int64          `json:"last_activity" dynamodbav:"last_activity"`
+}
+
+type PlayerItemList []*PlayerItem
+
+func (pil PlayerItemList) GetConnectionIDsOfPlayerItems() []string {
+	connectionIDs := make([]string, 0, len(pil))
+	for _, player := range pil {
+		connectionIDs = append(connectionIDs, player.ConnectionID)
+	}
+	return connectionIDs
+}
+func (pil PlayerItemList) GetPlayerItemFromUserName(userName string) *PlayerItem {
+	for _, playerItem := range pil {
+		if playerItem.UserName == userName {
+			return playerItem
+		}
+	}
+	return nil
+}
+func (pil PlayerItemList) PlayerItemListToPlayerList() PlayerList {
+	players := make([]Player, 0, len(pil))
+	for _, playerItem := range pil {
+		players = append(players, Player{
+			UserName: playerItem.UserName,
+			Status:   playerItem.Status,
+			IsAdmin:  playerItem.IsAdmin,
+		})
+	}
+	return players
+}
+
+func (pil PlayerItemList) GetLastStory(userName string, currentStage int) string {
+	for _, player := range pil {
+		if player.Participants[currentStage] == userName {
+			return pil.GetPlayerItemFromUserName(player.Participants[currentStage-1]).Contributions[currentStage-1]
+		}
+	}
+	return ""
+}
+
+type DBService interface {
+	UpdatePlayerItem(player PlayerItem) error
+	ResetPlayerItem(player *PlayerItem) error
+	RemovePlayerItem(player PlayerItem) error
+	RemoveConnection(connectionID string) error
+	GetPlayerItems(room string) (PlayerItemList, error)
+}
+
+type WSService interface {
+	PostToConnection(connectionID string, data interface{}) error
+	PostToConnections(connectionIDs []string, data interface{}) error
 }
