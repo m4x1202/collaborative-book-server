@@ -126,13 +126,13 @@ type PlayerItem struct {
 
 type PlayerItemList []*PlayerItem
 
-func (pil PlayerItemList) HasAdmin() bool {
+func (pil PlayerItemList) GetAdmin() *PlayerItem {
 	for _, player := range pil {
 		if player.IsAdmin {
-			return true
+			return player
 		}
 	}
-	return false
+	return nil
 }
 
 func (pil PlayerItemList) GetConnectionIDsOfPlayerItems() []string {

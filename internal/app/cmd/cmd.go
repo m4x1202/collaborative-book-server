@@ -187,7 +187,7 @@ func register(dbs cb.DBService, connectionID string, message cb.ClientMessage, p
 	if !playerExists {
 		players = append(players, player)
 	}
-	if !players.HasAdmin() {
+	if players.GetAdmin() == nil {
 		log.Infof("Room %s does not yet have an admin. New admin is user %s", player.Room, player.UserName)
 		player.IsAdmin = true
 	}
@@ -243,7 +243,7 @@ func sendRoomUpdate(wss cb.WSService, playerItems cb.PlayerItemList) error {
 
 	message := cb.RoomUpdateMessage{
 		MessageType: cb.RoomUmdate,
-		RoomState:   playerItems[0].RoomState,
+		RoomState:   playerItems.GetAdmin().RoomState,
 		UserList:    playerItems.PlayerItemListToPlayerList(),
 	}
 
