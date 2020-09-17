@@ -4,12 +4,12 @@ const (
 	DefaultRoomName = "unknown"
 )
 
-type RoomState int
+type RoomState string
 
 const (
-	Lobby RoomState = iota
-	WriteStories
-	ShowStories
+	Lobby        RoomState = "lobby"
+	WriteStories RoomState = "write_stories"
+	ShowStories  RoomState = "show_stories"
 )
 
 /// BEGIN Server/Client Interface
@@ -66,12 +66,12 @@ type RegistrationResult struct {
 	Result      RegistrationResultString `json:"result"`
 }
 
-type UserStatus int
+type UserStatus string
 
 const (
-	Waiting UserStatus = iota
-	Writing
-	Submitted
+	Waiting   UserStatus = "waiting"
+	Writing   UserStatus = "writing"
+	Submitted UserStatus = "submitted"
 )
 
 type PlayerList []Player
