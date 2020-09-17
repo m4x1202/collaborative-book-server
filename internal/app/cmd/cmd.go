@@ -162,6 +162,7 @@ func register(dbs cb.DBService, connectionID string, message cb.ClientMessage, p
 		ConnectionID: connectionID,
 		UserName:     message.UserName,
 		Spectating:   true,
+		Status:       cb.Waiting,
 	}
 	log.Debugf("Player trying to register: %v", player)
 
