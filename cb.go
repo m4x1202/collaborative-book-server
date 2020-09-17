@@ -4,12 +4,12 @@ const (
 	DefaultRoomName = "unknown"
 )
 
-type RoomState string
+type RoomState int
 
 const (
-	Lobby        RoomState = "lobby"
-	WriteStories RoomState = "write_stories"
-	ShowStories  RoomState = "show_stories"
+	Lobby RoomState = iota
+	WriteStories
+	ShowStories
 )
 
 /// BEGIN Server/Client Interface
