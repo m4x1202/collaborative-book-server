@@ -1,5 +1,7 @@
 package cb
 
+import "strconv"
+
 const (
 	DefaultRoomName = "unknown"
 )
@@ -109,17 +111,17 @@ type CloseRoomMessage struct {
 /// DynamoDB item
 
 type PlayerItem struct {
-	Room          string         `json:"room" dynamodbav:"room"`
-	ConnectionID  string         `json:"connectionId" dynamodbav:"connectionId"`
-	UserName      string         `json:"user_name" dynamodbav:"user_name"`
-	Status        UserStatus     `json:"user_status" dynamodbav:"user_status"`
-	IsAdmin       bool           `json:"is_admin" dynamodbav:"is_admin"`
-	RoomState     RoomState      `json:"room_state" dynamodbav:"room_state"`
-	LastStage     int            `json:"last_stage" dynamodbav:"last_stage"`
-	Spectating    bool           `json:"spectating" dynamodbav:"spectating"`
-	Contributions map[int]string `json:"contributions" dynamodbav:"contributions"`
-	Participants  map[int]string `json:"participants" dynamodbav:"participants"`
-	LastActivity  int64          `json:"last_activity" dynamodbav:"last_activity"`
+	Room          string            `json:"room" dynamodbav:"room"`
+	ConnectionID  string            `json:"connectionId" dynamodbav:"connectionId"`
+	UserName      string            `json:"user_name" dynamodbav:"user_name"`
+	Status        UserStatus        `json:"user_status" dynamodbav:"user_status"`
+	IsAdmin       bool              `json:"is_admin" dynamodbav:"is_admin"`
+	RoomState     RoomState         `json:"room_state" dynamodbav:"room_state"`
+	LastStage     int               `json:"last_stage" dynamodbav:"last_stage"`
+	Spectating    bool              `json:"spectating" dynamodbav:"spectating"`
+	Contributions map[string]string `json:"contributions" dynamodbav:"contributions"`
+	Participants  map[string]string `json:"participants" dynamodbav:"participants"`
+	LastActivity  int64             `json:"last_activity" dynamodbav:"last_activity"`
 }
 
 type PlayerItemList []*PlayerItem
@@ -151,10 +153,12 @@ func (pil PlayerItemList) PlayerItemListToPlayerList() PlayerList {
 	return players
 }
 
-func (pil PlayerItemList) GetLastStory(userName string, currentStage int) string {
+func (pil PlayerItemList) GetLastStory(userName string, currentStage string) string {
+	stage, _ := strconv.Atoi(currentStage)
+	prevStage := strconv.Itoa(stage - 1)
 	for _, player := range pil {
 		if player.Participants[currentStage] == userName {
-			return pil.GetPlayerItemFromUserName(player.Participants[currentStage-1]).Contributions[currentStage-1]
+			return pil.GetPlayerItemFromUserName(player.Participants[prevStage]).Contributions[prevStage]
 		}
 	}
 	return ""

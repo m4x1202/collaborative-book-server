@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -172,21 +173,19 @@ func register(dbs cb.DBService, connectionID string, message cb.ClientMessage, p
 		}
 		playerExists = true
 		log.Debugf("Existing Player in room: %v", existingPlayer)
-		oldConnectionID := existingPlayer.ConnectionID
-		existingPlayer.ConnectionID = player.ConnectionID
+		if existingPlayer.ConnectionID != player.ConnectionID {
+			err = dbs.RemovePlayerItem(*existingPlayer)
+			if err != nil {
+				return nil, err
+			}
+			log.Debugf("Old connectionId %s of player %s in room %s deleted after reconnect", existingPlayer.ConnectionID, existingPlayer.UserName, existingPlayer.Room)
+			existingPlayer.ConnectionID = player.ConnectionID
+		}
 		existingPlayer.LastActivity = getTTLTime()
 		err = dbs.UpdatePlayerItem(*existingPlayer)
 		if err != nil {
 			return nil, err
 		}
-		err = dbs.RemovePlayerItem(cb.PlayerItem{
-			Room:         player.Room,
-			ConnectionID: oldConnectionID,
-		})
-		if err != nil {
-			return nil, err
-		}
-		log.Debugf("Old connectionId %s of player %s in room %s deleted after reconnect", oldConnectionID, player.UserName, player.Room)
 	}
 	if !playerExists {
 		if len(players) == 0 {
@@ -276,9 +275,6 @@ func handleStartSession(dbs cb.DBService, wss cb.WSService, message cb.ClientMes
 	participants := GenerateParticipants(players, payload.LastStage)
 
 	for _, player := range players {
-		if player.Contributions == nil {
-			player.Contributions = make(map[int]string, payload.LastStage)
-		}
 		if player.Participants == nil {
 			player.Participants = participants[player.UserName]
 		}
@@ -389,7 +385,10 @@ func handleSubmitStory(dbs cb.DBService, wss cb.WSService, message cb.ClientMess
 	var err error
 
 	currentStage := 1 + len(messagingPlayer.Contributions)
-	messagingPlayer.Contributions[currentStage] = message.Payload
+	if messagingPlayer.Contributions == nil {
+		messagingPlayer.Contributions = make(map[string]string, messagingPlayer.LastStage)
+	}
+	messagingPlayer.Contributions[strconv.Itoa(currentStage)] = message.Payload
 	messagingPlayer.Status = cb.Submitted
 	err = dbs.UpdatePlayerItem(*messagingPlayer)
 	if err != nil {
@@ -428,7 +427,7 @@ func handleSubmitStory(dbs cb.DBService, wss cb.WSService, message cb.ClientMess
 			return err
 		}
 
-		lastStory := players.GetLastStory(player.UserName, currentStage)
+		lastStory := players.GetLastStory(player.UserName, strconv.Itoa(currentStage))
 		if lastStory == "" {
 			log.Errorf("Could not find last story for user %s in current stage %d in room %s", player.UserName, currentStage+1, player.Room)
 		}
@@ -501,14 +500,14 @@ func handleSubmitStory(dbs cb.DBService, wss cb.WSService, message cb.ClientMess
 	return sendRoomUpdate(wss, players) // Something changed in this room so we immediately send an update
 }
 
-func GenerateParticipants(players cb.PlayerItemList, numStages int) map[string]map[int]string {
-	result := make(map[string]map[int]string, len(players))
+func GenerateParticipants(players cb.PlayerItemList, numStages int) map[string]map[string]string {
+	result := make(map[string]map[string]string, len(players))
 	availableUsers := make([]string, 0, len(players))
 
 	for _, player := range players {
 		availableUsers = append(availableUsers, player.UserName)
-		result[player.UserName] = make(map[int]string, numStages)
-		result[player.UserName][1] = player.UserName
+		result[player.UserName] = make(map[string]string, numStages)
+		result[player.UserName]["1"] = player.UserName
 	}
 
 	rand.Seed(time.Now().UnixNano())
@@ -517,11 +516,11 @@ func GenerateParticipants(players cb.PlayerItemList, numStages int) map[string]m
 		rand.Shuffle(len(availableUsers), func(i, j int) { availableUsers[i], availableUsers[j] = availableUsers[j], availableUsers[i] })
 		j := 0
 		for _, player := range players {
-			if result[player.UserName][i-1] == availableUsers[j] {
+			if result[player.UserName][strconv.Itoa(i-1)] == availableUsers[j] {
 				i--
 				break
 			}
-			result[player.UserName][i] = availableUsers[j]
+			result[player.UserName][strconv.Itoa(i)] = availableUsers[j]
 			j++
 		}
 	}

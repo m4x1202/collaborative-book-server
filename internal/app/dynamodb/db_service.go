@@ -42,7 +42,7 @@ func (dbs DBService) UpdatePlayerItem(player cb.PlayerItem) error {
 		}
 		updateExpression = updateExpression.Set(
 			expression.Name(name),
-			expression.IfNotExists(expression.Name(name), expression.Value(value)),
+			expression.Value(value),
 		)
 	}
 	expr, err := expression.NewBuilder().
