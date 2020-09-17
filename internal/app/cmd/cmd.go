@@ -181,23 +181,19 @@ func register(dbs cb.DBService, connectionID string, message cb.ClientMessage, p
 			log.Debugf("Old connectionId %s of player %s in room %s deleted after reconnect", existingPlayer.ConnectionID, existingPlayer.UserName, existingPlayer.Room)
 			existingPlayer.ConnectionID = player.ConnectionID
 		}
-		existingPlayer.LastActivity = getTTLTime()
-		err = dbs.UpdatePlayerItem(*existingPlayer)
-		if err != nil {
-			return nil, err
-		}
+		player = existingPlayer
 	}
 	if !playerExists {
-		if len(players) == 0 {
-			log.Infof("Player %s creates new room %s and will therefore be admin", player.UserName, player.Room)
-			player.IsAdmin = true
-		}
-		player.LastActivity = getTTLTime()
-		err = dbs.UpdatePlayerItem(*player)
-		if err != nil {
-			return nil, err
-		}
 		players = append(players, player)
+	}
+	if !players.HasAdmin() {
+		log.Infof("Room %s does not yet have an admin. New admin is user %s", player.Room, player.UserName)
+		player.IsAdmin = true
+	}
+	player.LastActivity = getTTLTime()
+	err = dbs.UpdatePlayerItem(*player)
+	if err != nil {
+		return nil, err
 	}
 	log.Infof("Player with connectionId %s successfully registered and assigned to room:username (%s:%s)", connectionID, player.Room, player.UserName)
 
