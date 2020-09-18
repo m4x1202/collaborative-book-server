@@ -92,15 +92,23 @@ func (dbs DBService) RemovePlayerItem(player cb.PlayerItem) error {
 }
 
 func (dbs DBService) RemoveConnection(connectionID string) error {
+	var conditionExpression expression.ConditionBuilder
+	conditionExpression = expression.Name("connectionId").Equal(expression.Value(connectionID))
+
+	expr, err := expression.NewBuilder().
+		WithFilter(conditionExpression).
+		WithProjection(expression.NamesList(expression.Name("room"))).
+		Build()
+	if err != nil {
+		return err
+	}
+
 	scanInput := &dynamodb.ScanInput{
-		TableName:            aws.String(DynamoDBTable),
-		ProjectionExpression: aws.String("room"),
-		FilterExpression:     aws.String("connectionId = :cid"),
-		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-			":cid": {
-				S: aws.String(connectionID),
-			},
-		},
+		TableName:                 aws.String(DynamoDBTable),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		ProjectionExpression:      expr.Projection(),
+		FilterExpression:          expr.Filter(),
 	}
 
 	scanOutput, err := dbs.db.Scan(scanInput)
@@ -130,14 +138,21 @@ func (dbs DBService) RemoveConnection(connectionID string) error {
 }
 
 func (dbs DBService) GetPlayerItems(room string) (cb.PlayerItemList, error) {
+	var keyConditionExpression expression.KeyConditionBuilder
+	keyConditionExpression = expression.Key("room").Equal(expression.Value(room))
+
+	expr, err := expression.NewBuilder().
+		WithKeyCondition(keyConditionExpression).
+		Build()
+	if err != nil {
+		return nil, err
+	}
+
 	queryInput := &dynamodb.QueryInput{
-		TableName:              aws.String(DynamoDBTable),
-		KeyConditionExpression: aws.String("room = :r"),
-		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-			":r": {
-				S: aws.String(room),
-			},
-		},
+		TableName:                 aws.String(DynamoDBTable),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		KeyConditionExpression:    expr.KeyCondition(),
 	}
 
 	queryOutput, err := dbs.db.Query(queryInput)
