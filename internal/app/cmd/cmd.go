@@ -498,27 +498,47 @@ func handleSubmitStory(dbs cb.DBService, wss cb.WSService, message cb.ClientMess
 }
 
 func GenerateParticipants(players cb.PlayerItemList, numStages int) map[string]map[string]string {
-	result := make(map[string]map[string]string, len(players))
-	availableUsers := make([]string, 0, len(players))
+	numPlayers := len(players)
+	result := make(map[string]map[string]string, numPlayers)
+	availableUsers := make([]string, 0, numPlayers)
 
 	for _, player := range players {
 		availableUsers = append(availableUsers, player.UserName)
 		result[player.UserName] = make(map[string]string, numStages)
 		result[player.UserName]["1"] = player.UserName
 	}
+	if numStages == 1 {
+		return result
+	}
 
 	rand.Seed(time.Now().UnixNano())
 
-	for i := 2; i <= numStages; i++ {
-		rand.Shuffle(len(availableUsers), func(i, j int) { availableUsers[i], availableUsers[j] = availableUsers[j], availableUsers[i] })
-		j := 0
+	for stage := 2; stage <= numStages; stage++ {
+		if numPlayers == 1 {
+			result[players[0].UserName][strconv.Itoa(stage)] = players[0].UserName
+			continue
+		}
+
+		remainingPlayers := make([]string, 0, numPlayers)
+		copy(remainingPlayers, availableUsers)
+		rand.Shuffle(len(remainingPlayers), func(i, j int) { remainingPlayers[i], remainingPlayers[j] = remainingPlayers[j], remainingPlayers[i] })
 		for _, player := range players {
-			if result[player.UserName][strconv.Itoa(i-1)] == availableUsers[j] {
-				i--
-				break
+			success := false
+			for !success {
+				// Ensure we do not assign a player twice to the same story
+				if result[player.UserName][strconv.Itoa(stage-1)] == remainingPlayers[0] {
+					rand.Shuffle(len(remainingPlayers), func(i, j int) { remainingPlayers[i], remainingPlayers[j] = remainingPlayers[j], remainingPlayers[i] })
+					break
+				}
+				// Ensure there is always more 1 stage distance between assignments
+				if numPlayers > 2 && stage >= 3 && result[player.UserName][strconv.Itoa(stage-2)] == remainingPlayers[0] {
+					rand.Shuffle(len(remainingPlayers), func(i, j int) { remainingPlayers[i], remainingPlayers[j] = remainingPlayers[j], remainingPlayers[i] })
+					break
+				}
+				result[player.UserName][strconv.Itoa(stage)] = remainingPlayers[0]
+				remainingPlayers = remainingPlayers[1:]
+				success = true
 			}
-			result[player.UserName][strconv.Itoa(i)] = availableUsers[j]
-			j++
 		}
 	}
 
