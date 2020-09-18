@@ -519,7 +519,7 @@ func GenerateParticipants(players cb.PlayerItemList, numStages int) map[string]m
 			continue
 		}
 
-		remainingPlayers := make([]string, 0, numPlayers)
+		remainingPlayers := make([]string, numPlayers, numPlayers)
 		copy(remainingPlayers, availableUsers)
 		rand.Shuffle(len(remainingPlayers), func(i, j int) { remainingPlayers[i], remainingPlayers[j] = remainingPlayers[j], remainingPlayers[i] })
 		for _, player := range players {
