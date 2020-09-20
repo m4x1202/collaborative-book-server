@@ -163,11 +163,11 @@ func (pil PlayerItemList) PlayerItemListToPlayerList() PlayerList {
 }
 
 func (pil PlayerItemList) GetLastStory(userName string, currentStage string) string {
-	stage, _ := strconv.Atoi(currentStage)
-	prevStage := strconv.Itoa(stage - 1)
+	currentStageInt, _ := strconv.Atoi(currentStage)
+	nextStage := strconv.Itoa(currentStageInt + 1)
 	for _, player := range pil {
-		if player.Participants[currentStage] == userName {
-			return pil.GetPlayerItemFromUserName(player.Participants[prevStage]).Contributions[prevStage]
+		if player.Participants[nextStage] == userName {
+			return pil.GetPlayerItemFromUserName(player.Participants[currentStage]).Contributions[currentStage]
 		}
 	}
 	return ""
