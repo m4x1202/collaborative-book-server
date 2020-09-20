@@ -269,7 +269,7 @@ func handleStartSession(dbs cb.DBService, wss cb.WSService, message cb.ClientMes
 
 	for _, player := range players {
 		if player.Participants == nil {
-			player.Participants = participants[player.UserName]
+			player.Participants = participants[player.UserName].ToStringMap()
 		}
 		player.LastStage = payload.LastStage
 		player.RoomState = cb.WriteStories
@@ -438,15 +438,15 @@ func handleSubmitStory(dbs cb.DBService, wss cb.WSService, message cb.ClientMess
 	return sendRoomUpdate(wss, players) // Something changed in this room so we immediately send an update
 }
 
-func GenerateParticipants(players cb.PlayerItemList, numStages int) map[string]map[string]string {
+func GenerateParticipants(players cb.PlayerItemList, numStages int) map[string]Participants {
 	numPlayers := len(players)
-	result := make(map[string]map[string]string, numPlayers)
+	result := make(map[string]Participants, numPlayers)
 	availableUsers := make([]string, 0, numPlayers)
 
 	for _, player := range players {
 		availableUsers = append(availableUsers, player.UserName)
-		result[player.UserName] = make(map[string]string, numStages)
-		result[player.UserName]["1"] = player.UserName
+		result[player.UserName] = make(Participants, numStages)
+		result[player.UserName][1] = player.UserName
 	}
 	if numStages == 1 {
 		return result
@@ -456,7 +456,7 @@ func GenerateParticipants(players cb.PlayerItemList, numStages int) map[string]m
 
 	for stage := 2; stage <= numStages; stage++ {
 		if numPlayers == 1 {
-			result[players[0].UserName][strconv.Itoa(stage)] = players[0].UserName
+			result[players[0].UserName][stage] = players[0].UserName
 			continue
 		}
 
@@ -467,16 +467,16 @@ func GenerateParticipants(players cb.PlayerItemList, numStages int) map[string]m
 			success := false
 			for !success {
 				// Ensure we do not assign a player twice to the same story
-				if result[player.UserName][strconv.Itoa(stage-1)] == remainingPlayers[0] {
+				if result[player.UserName][stage-1] == remainingPlayers[0] {
 					rand.Shuffle(len(remainingPlayers), func(i, j int) { remainingPlayers[i], remainingPlayers[j] = remainingPlayers[j], remainingPlayers[i] })
 					break
 				}
 				// Ensure there is always more 1 stage distance between assignments
-				if numPlayers > 2 && stage >= 3 && result[player.UserName][strconv.Itoa(stage-2)] == remainingPlayers[0] {
+				if numPlayers > 2 && stage >= 3 && result[player.UserName][stage-2] == remainingPlayers[0] {
 					rand.Shuffle(len(remainingPlayers), func(i, j int) { remainingPlayers[i], remainingPlayers[j] = remainingPlayers[j], remainingPlayers[i] })
 					break
 				}
-				result[player.UserName][strconv.Itoa(stage)] = remainingPlayers[0]
+				result[player.UserName][stage] = remainingPlayers[0]
 				remainingPlayers = remainingPlayers[1:]
 				success = true
 			}
@@ -484,4 +484,14 @@ func GenerateParticipants(players cb.PlayerItemList, numStages int) map[string]m
 	}
 
 	return result
+}
+
+type Participants map[int]string
+
+func (in Participants) ToStringMap() map[string]string {
+	out := make(map[string]string, len(in))
+	for key, val := range in {
+		out[strconv.Itoa(key)] = val
+	}
+	return out
 }
