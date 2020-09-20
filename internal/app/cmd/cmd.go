@@ -74,17 +74,13 @@ func Handler(request events.APIGatewayWebsocketProxyRequest) (response interface
 	return
 }
 
-func getTTLTime() int64 {
-	return time.Now().AddDate(0, 0, 1).Unix()
-}
-
 // Connect will receive the $connect request
 func Connect(dbs cb.DBService, request events.APIGatewayWebsocketProxyRequest) error {
 	log.Debug("[Connect] - Method called")
 	playerItem := cb.PlayerItem{
 		Room:         cb.DefaultRoomName,
 		ConnectionID: request.RequestContext.ConnectionID,
-		LastActivity: getTTLTime(),
+		LastActivity: time.Now().AddDate(0, 0, 1).Unix(),
 	}
 	err := dbs.UpdatePlayerItem(playerItem)
 	if err != nil {
@@ -191,7 +187,7 @@ func register(dbs cb.DBService, connectionID string, message cb.ClientMessage, p
 		log.Infof("Room %s does not yet have an admin. New admin is user %s", player.Room, player.UserName)
 		player.IsAdmin = true
 	}
-	player.LastActivity = getTTLTime()
+	player.LastActivity = time.Now().AddDate(0, 0, 1).Unix()
 	err = dbs.UpdatePlayerItem(*player)
 	if err != nil {
 		return nil, err
