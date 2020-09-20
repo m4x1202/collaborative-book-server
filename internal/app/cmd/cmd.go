@@ -439,61 +439,6 @@ func handleSubmitStory(dbs cb.DBService, wss cb.WSService, message cb.ClientMess
 			return err
 		}
 	}
-
-	// Send the last story part to every participating user
-	// At this point we know that the prior stage existed
-	/*prior := &room.Story.StoryStages[len(room.Story.StoryStages)-2]
-
-	participants := make([]string, len(room.Story.ParticipatingUsers))
-	idx := 0
-	for participant := range room.Story.ParticipatingUsers {
-		participants[idx] = participant
-		idx++
-	}
-
-	prime := cb.GetPrime()
-	// If we would map to the same index, we have to choose a different prime number
-	if (prime % participantsCount) == 0 {
-		primeIndex = (primeIndex + 1) % len(primes)
-		prime = primes[primeIndex]
-	}
-
-	oldSubmitterToNewSubmitterMapping := make(map[string]string)
-	for i, oldSubmitter := range participants {
-		newSubmitterIndex := (i + prime) % participantsCount
-		newSubmitter := participants[newSubmitterIndex]
-		oldSubmitterToNewSubmitterMapping[oldSubmitter] = newSubmitter
-	}
-
-	last = &room.Story.StoryStages[len(room.Story.StoryStages)-1]
-	last.UserMapping = make(map[string]string)
-	for _, owner := range participants {
-		oldSubmitter := prior.UserMapping[owner]
-		newSubmitter := oldSubmitterToNewSubmitterMapping[oldSubmitter]
-		last.UserMapping[owner] = newSubmitter
-
-	// Send the old stories to the participating users
-	for _, owner := range participants {
-		text := getTextOfStage(room, owner, len(room.Story.StoryStages)-2)
-
-		// Find out who is going to write the next stage of the owners story
-		receiverUserName := last.UserMapping[owner]
-		receiver := room.Users[receiverUserName]
-
-		updateMessage := cb.RoundUpdateMessage{
-			MessageType:  cb.RoundUpdate,
-			CurrentStage: len(room.Story.StoryStages),
-			LastStage:    room.Story.LastStage,
-			Text:         text,
-		}
-
-		marshalled, err := json.Marshal(updateMessage)
-		if err != nil {
-			return err
-		}
-
-		receiver.Connection.WriteMessage(websocket.TextMessage, marshalled)
-	}*/
 	return sendRoomUpdate(wss, players) // Something changed in this room so we immediately send an update
 }
 
