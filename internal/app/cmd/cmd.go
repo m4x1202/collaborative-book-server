@@ -347,9 +347,10 @@ func handleShowStory(wss cb.WSService, message cb.ClientMessage, players cb.Play
 		payload.Stage = playerOfStory.LastStage
 	}
 
-	stories := make([]string, 0, len(playerOfStory.Participants))
-	for stage, participant := range playerOfStory.Participants {
-		stories = append(stories, players.GetPlayerItemFromUserName(participant).Contributions[stage])
+	stories := make([]string, 0, payload.Stage)
+	for stage := 1; stage <= payload.Stage; stage++ {
+		stageStr := strconv.Itoa(stage)
+		stories = append(stories, players.GetPlayerItemFromUserName(playerOfStory.Participants[stageStr]).Contributions[stageStr])
 	}
 
 	showStoryMessage := cb.ShowStoryMessage{
