@@ -30,6 +30,8 @@ func Run() int {
 
 // Handler is the base handler that will receive all web socket request
 func Handler(request events.APIGatewayWebsocketProxyRequest) (response interface{}, err error) {
+	log.Trace(request)
+
 	defer func() {
 		if r := recover(); r != nil {
 			log.Error("Recovered in f", r)
