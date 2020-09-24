@@ -50,14 +50,19 @@ func Handler(request events.APIGatewayWebsocketProxyRequest) (response interface
 		return
 	}
 	dbService := dynamodb.NewDBService(sess)
+	wsService := apigateway.NewWSService(sess)
 
 	switch request.RequestContext.RouteKey {
 	case "$connect":
 		err = Connect(dbService, request)
 	case "$disconnect":
 		err = Disconnect(dbService, request)
+	case "ping":
+		err = wsService.PostToConnection(request.RequestContext.ConnectionID, struct {
+			Type string `json:"type"`
+		}{"pong"})
 	default:
-		wsService := apigateway.NewWSService(sess)
+		log.Debugf("Route Key: %s", request.RequestContext.RouteKey)
 		err = Default(dbService, wsService, request)
 	}
 	if err != nil {
