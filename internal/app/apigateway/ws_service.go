@@ -61,10 +61,8 @@ func (wss WSService) postToConnection(connectionID string, data []byte) error {
 		Data:         data,
 	}
 
-	_, err := wss.apigateway.PostToConnection(input)
-	if err != nil {
+	if _, err := wss.apigateway.PostToConnection(input); err != nil {
 		return err
 	}
-
 	return nil
 }

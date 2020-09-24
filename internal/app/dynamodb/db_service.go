@@ -60,8 +60,7 @@ func (dbs DBService) UpdatePlayerItem(player cb.PlayerItem) error {
 		UpdateExpression:          expr.Update(),
 	}
 
-	_, err = dbs.db.UpdateItem(updateItemInput)
-	if err != nil {
+	if _, err = dbs.db.UpdateItem(updateItemInput); err != nil {
 		return err
 	}
 	return nil
@@ -84,8 +83,7 @@ func (dbs DBService) RemovePlayerItem(player cb.PlayerItem) error {
 		TableName: aws.String(DynamoDBTable),
 		Key:       marshalPlayerKey(player),
 	}
-	_, err := dbs.db.DeleteItem(deleteItemInput)
-	if err != nil {
+	if _, err := dbs.db.DeleteItem(deleteItemInput); err != nil {
 		return err
 	}
 	return nil
