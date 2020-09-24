@@ -22,7 +22,7 @@ import (
 func Run() int {
 	log.SetFormatter(&log.JSONFormatter{})
 	log.SetReportCaller(true)
-	log.SetLevel(log.TraceLevel)
+	log.SetLevel(log.InfoLevel)
 
 	lambda.Start(Handler)
 	return 0
