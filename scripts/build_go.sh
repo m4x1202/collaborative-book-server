@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -e
 
 export GOOS=linux
 export GOARCH=amd64
