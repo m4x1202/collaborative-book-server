@@ -112,7 +112,7 @@ type CloseRoomMessage struct {
 
 type PlayerItem struct {
 	Room          string            `json:"room" dynamodbav:"room"`
-	ConnectionID  string            `json:"connectionId" dynamodbav:"connectionId"`
+	ConnectionID   string      `json:"connection_id" dynamodbav:"connection_id"`
 	UserName      string            `json:"user_name" dynamodbav:"user_name"`
 	Status        UserStatus        `json:"user_status" dynamodbav:"user_status"`
 	IsAdmin       bool              `json:"is_admin" dynamodbav:"is_admin"`
@@ -121,7 +121,6 @@ type PlayerItem struct {
 	Spectating    bool              `json:"spectating" dynamodbav:"spectating"`
 	Contributions map[string]string `json:"contributions" dynamodbav:"contributions"`
 	Participants  map[string]string `json:"participants" dynamodbav:"participants"`
-	LastActivity  int64             `json:"last_activity" dynamodbav:"last_activity"`
 }
 
 type PlayerItemList []*PlayerItem
@@ -174,7 +173,7 @@ func (pil PlayerItemList) GetLastStory(userName string, currentStage string) str
 }
 
 type DBService interface {
-	UpdatePlayerItem(player PlayerItem) error
+	UpdatePlayerItem(player *PlayerItem) error
 	ResetPlayerItem(player *PlayerItem) error
 	RemovePlayerItem(player PlayerItem) error
 	RemoveConnection(connectionID string) error

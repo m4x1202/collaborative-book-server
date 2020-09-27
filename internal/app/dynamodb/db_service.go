@@ -2,6 +2,7 @@ package dynamodb
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -30,20 +31,23 @@ func NewDBService(sess *session.Session) DBService {
 	}
 }
 
-func (dbs DBService) UpdatePlayerItem(player cb.PlayerItem) error {
+func (dbs DBService) UpdatePlayerItem(player *cb.PlayerItem) error {
+	player.ExpirationTime = time.Now().Add(time.Hour * 2).Unix()
 	marshaledPlayer, err := dynamodbattribute.MarshalMap(player)
 	if err != nil {
 		return err
 	}
 	var updateExpression expression.UpdateBuilder
 	for name, value := range marshaledPlayer {
-		if name == "room" || name == "connectionId" {
+		switch name {
+		case "room", "connection_id":
 			continue
+		default:
+			updateExpression = updateExpression.Set(
+				expression.Name(name),
+				expression.Value(value),
+			)
 		}
-		updateExpression = updateExpression.Set(
-			expression.Name(name),
-			expression.Value(value),
-		)
 	}
 	expr, err := expression.NewBuilder().
 		WithUpdate(updateExpression).
@@ -56,7 +60,7 @@ func (dbs DBService) UpdatePlayerItem(player cb.PlayerItem) error {
 		TableName:                 aws.String(DynamoDBTable),
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
-		Key:                       marshalPlayerKey(player),
+		Key:                       marshalPlayerKey(*player),
 		UpdateExpression:          expr.Update(),
 	}
 
@@ -91,7 +95,7 @@ func (dbs DBService) RemovePlayerItem(player cb.PlayerItem) error {
 
 func (dbs DBService) RemoveConnection(connectionID string) error {
 	var conditionExpression expression.ConditionBuilder
-	conditionExpression = expression.Name("connectionId").Equal(expression.Value(connectionID))
+	conditionExpression = expression.Name("connection_id").Equal(expression.Value(connectionID))
 
 	expr, err := expression.NewBuilder().
 		WithFilter(conditionExpression).
@@ -122,7 +126,7 @@ func (dbs DBService) RemoveConnection(connectionID string) error {
 	}
 	var errs []error
 	for _, room := range rooms {
-		log.Debugf("Player with connectionId %s is in room %s", connectionID, room["room"])
+		log.Debugf("Player with connection_id %s is in room %s", connectionID, room["room"])
 
 		err = dbs.RemovePlayerItem(cb.PlayerItem{
 			Room:         room["room"],
@@ -179,7 +183,7 @@ func marshalPlayerKey(player cb.PlayerItem) map[string]*dynamodb.AttributeValue 
 		"room": {
 			S: aws.String(player.Room),
 		},
-		"connectionId": {
+		"connection_id": {
 			S: aws.String(player.ConnectionID),
 		},
 	}
