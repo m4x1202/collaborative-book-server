@@ -114,23 +114,26 @@ func (dbs DBService) RemoveConnection(connectionID string) error {
 		return err
 	}
 	log.Tracef("Scan output: %v", *scanOutput)
-	if aws.Int64Value(scanOutput.Count) > 1 {
-		return fmt.Errorf("More than one player with this connectionId")
-	}
 
-	var room string
-	err = dynamodbattribute.Unmarshal(scanOutput.Items[0]["room"], &room)
+	var rooms []map[string]string
+	err = dynamodbattribute.UnmarshalListOfMaps(scanOutput.Items, &rooms)
 	if err != nil {
 		return err
 	}
-	log.Debugf("Player with connectionId %s is in room %s", connectionID, room)
+	var errs []error
+	for _, room := range rooms {
+		log.Debugf("Player with connectionId %s is in room %s", connectionID, room["room"])
 
-	err = dbs.RemovePlayerItem(cb.PlayerItem{
-		Room:         room,
-		ConnectionID: connectionID,
-	})
-	if err != nil {
-		return err
+		err = dbs.RemovePlayerItem(cb.PlayerItem{
+			Room:         room["room"],
+			ConnectionID: connectionID,
+		})
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("Removing connection %s resulted in errors: %v", connectionID, errs)
 	}
 	return nil
 }
