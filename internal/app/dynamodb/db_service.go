@@ -71,15 +71,14 @@ func (dbs DBService) UpdatePlayerItem(player *cb.PlayerItem) error {
 }
 
 func (dbs DBService) ResetPlayerItem(player *cb.PlayerItem) error {
-	player.Contributions = nil
-	player.IsAdmin = false
-	player.Participants = nil
-	player.LastStage = 0
-	player.Spectating = true
-	player.RoomState = cb.Lobby
-	player.Status = cb.Waiting
+	playerInfo := cb.PlayerInfo{
+		UserName:   player.PlayerInfo.UserName,
+		Status:     cb.Waiting,
+		Spectating: true,
+	}
+	player.PlayerInfo = &playerInfo
 
-	return dbs.UpdatePlayerItem(*player)
+	return dbs.UpdatePlayerItem(player)
 }
 
 func (dbs DBService) RemovePlayerItem(player cb.PlayerItem) error {

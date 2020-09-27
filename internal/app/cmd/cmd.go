@@ -159,19 +159,22 @@ func Default(dbs cb.DBService, wss cb.WSService, request events.APIGatewayWebsoc
 }
 
 func register(dbs cb.DBService, connectionID string, message cb.ClientMessage, players cb.PlayerItemList) (cb.PlayerItemList, error) {
+	playerInfo := cb.PlayerInfo{
+		UserName:   message.UserName,
+		Spectating: true,
+		Status:     cb.Waiting,
+	}
 	player := &cb.PlayerItem{
 		Room:         message.Room,
 		ConnectionID: connectionID,
-		UserName:     message.UserName,
-		Spectating:   true,
-		Status:       cb.Waiting,
+		PlayerInfo:   &playerInfo,
 	}
 	log.Debugf("Player trying to register: %v", player)
 
 	var err error
 	playerExists := false
 	for _, existingPlayer := range players {
-		if existingPlayer.UserName != player.UserName {
+		if existingPlayer.PlayerInfo.UserName != player.PlayerInfo.UserName {
 			continue
 		}
 		playerExists = true
@@ -181,7 +184,7 @@ func register(dbs cb.DBService, connectionID string, message cb.ClientMessage, p
 			if err != nil {
 				return nil, err
 			}
-			log.Debugf("Old connectionId %s of player %s in room %s deleted after reconnect", existingPlayer.ConnectionID, existingPlayer.UserName, existingPlayer.Room)
+			log.Debugf("Old connection_id %s of player %s in room %s deleted after reconnect", existingPlayer.ConnectionID, existingPlayer.PlayerInfo.UserName, existingPlayer.Room)
 			existingPlayer.ConnectionID = player.ConnectionID
 		}
 		player = existingPlayer
@@ -190,15 +193,14 @@ func register(dbs cb.DBService, connectionID string, message cb.ClientMessage, p
 		players = append(players, player)
 	}
 	if players.GetAdmin() == nil {
-		log.Infof("Room %s does not yet have an admin. New admin is user %s", player.Room, player.UserName)
-		player.IsAdmin = true
+		log.Infof("Room %s does not yet have an admin. New admin is user %s", player.Room, player.PlayerInfo.UserName)
+		player.PlayerInfo.IsAdmin = true
 	}
-	player.LastActivity = time.Now().AddDate(0, 0, 1).Unix()
-	err = dbs.UpdatePlayerItem(*player)
+	err = dbs.UpdatePlayerItem(player)
 	if err != nil {
 		return nil, err
 	}
-	log.Infof("Player with connectionId %s successfully registered and assigned to room:username (%s:%s)", connectionID, player.Room, player.UserName)
+	log.Infof("Player with connection_id %s successfully registered and assigned to room:username (%s:%s)", connectionID, player.Room, player.PlayerInfo.UserName)
 
 	err = dbs.RemovePlayerItem(cb.PlayerItem{
 		Room:         cb.DefaultRoomName,
@@ -207,7 +209,7 @@ func register(dbs cb.DBService, connectionID string, message cb.ClientMessage, p
 	if err != nil {
 		return nil, err
 	}
-	log.Debugf("Item with connectionId %s and %s room deleted", connectionID, cb.DefaultRoomName)
+	log.Debugf("Item with connection_id %s and %s room deleted", connectionID, cb.DefaultRoomName)
 
 	return players, nil
 }
@@ -245,7 +247,7 @@ func sendRoomUpdate(wss cb.WSService, playerItems cb.PlayerItemList) error {
 
 	message := cb.RoomUpdateMessage{
 		MessageType: cb.RoomUmdate,
-		RoomState:   playerItems.GetAdmin().RoomState,
+		RoomState:   playerItems.GetAdmin().PlayerInfo.RoomState,
 		UserList:    playerItems.PlayerItemListToPlayerList(),
 	}
 
@@ -260,7 +262,7 @@ func handleStartSession(dbs cb.DBService, wss cb.WSService, message cb.ClientMes
 		return fmt.Errorf("User %s that is not part of room %s tried to open a session", message.UserName, message.Room)
 	}
 	// Make sure only the admin opens a room
-	if !messagingPlayer.IsAdmin {
+	if !messagingPlayer.PlayerInfo.IsAdmin {
 		return fmt.Errorf("User %s that is not an admin in room %s tried to open a session", message.UserName, message.Room)
 	}
 
@@ -274,15 +276,16 @@ func handleStartSession(dbs cb.DBService, wss cb.WSService, message cb.ClientMes
 	participants := GenerateParticipants(players, payload.LastStage)
 
 	for _, player := range players {
-		if player.Participants == nil {
-			player.Participants = participants[player.UserName].ToStringMap()
+		playerInfo := player.PlayerInfo
+		if playerInfo.Participants == nil {
+			playerInfo.Participants = participants[playerInfo.UserName].ToStringMap()
 		}
-		player.LastStage = payload.LastStage
-		player.RoomState = cb.WriteStories
-		player.Status = cb.Writing
-		player.Spectating = false
+		playerInfo.LastStage = payload.LastStage
+		playerInfo.RoomState = cb.WriteStories
+		playerInfo.Status = cb.Writing
+		playerInfo.Spectating = false
 
-		err = dbs.UpdatePlayerItem(*player)
+		err = dbs.UpdatePlayerItem(player)
 		if err != nil {
 			return err
 		}
@@ -308,7 +311,7 @@ func handleCloseRoom(dbs cb.DBService, wss cb.WSService, message cb.ClientMessag
 		return fmt.Errorf("User %s that is not part of room %s tried to close the room", message.UserName, message.Room)
 	}
 	// Make sure only the admin closes a room
-	if !messagingPlayer.IsAdmin {
+	if !messagingPlayer.PlayerInfo.IsAdmin {
 		return fmt.Errorf("User %s that is not an admin in room %s tried to close the room", message.UserName, message.Room)
 	}
 
@@ -337,7 +340,7 @@ func handleShowStory(wss cb.WSService, message cb.ClientMessage, players cb.Play
 		return fmt.Errorf("User %s that is not part of room %s tried to show a message", message.UserName, message.Room)
 	}
 	// Make sure only the admin closes a room
-	if !messagingPlayer.IsAdmin {
+	if !messagingPlayer.PlayerInfo.IsAdmin {
 		return fmt.Errorf("User %s that is not an admin in room %s tried to show a message", message.UserName, message.Room)
 	}
 
@@ -349,14 +352,14 @@ func handleShowStory(wss cb.WSService, message cb.ClientMessage, players cb.Play
 	}
 
 	playerOfStory := players.GetPlayerItemFromUserName(payload.UserName)
-	if payload.Stage > playerOfStory.LastStage {
-		payload.Stage = playerOfStory.LastStage
+	if payload.Stage > playerOfStory.PlayerInfo.LastStage {
+		payload.Stage = playerOfStory.PlayerInfo.LastStage
 	}
 
 	stories := make([]string, 0, payload.Stage)
 	for stage := 1; stage <= payload.Stage; stage++ {
 		stageStr := strconv.Itoa(stage)
-		stories = append(stories, players.GetPlayerItemFromUserName(playerOfStory.Participants[stageStr]).Contributions[stageStr])
+		stories = append(stories, players.GetPlayerItemFromUserName(playerOfStory.PlayerInfo.Participants[stageStr]).PlayerInfo.Contributions[stageStr])
 	}
 
 	showStoryMessage := cb.ShowStoryMessage{
@@ -374,44 +377,44 @@ func handleSubmitStory(dbs cb.DBService, wss cb.WSService, message cb.ClientMess
 		return fmt.Errorf("User %s that is not part of room %s tried to submit a story", message.UserName, message.Room)
 	}
 	// Make sure that the sender is participating in this session
-	if messagingPlayer.Spectating {
+	if messagingPlayer.PlayerInfo.Spectating {
 		return fmt.Errorf("User %s is only spectating room %s but tried to submit a story", message.UserName, message.Room)
 	}
 	// Make sure that the room is in the right state
-	if messagingPlayer.RoomState != cb.WriteStories {
-		return fmt.Errorf("User %s tried to submit a story for room %s that is currently not accepting stories (Status: %v)", message.UserName, message.Room, messagingPlayer.RoomState)
+	if messagingPlayer.PlayerInfo.RoomState != cb.WriteStories {
+		return fmt.Errorf("User %s tried to submit a story for room %s that is currently not accepting stories (Status: %v)", message.UserName, message.Room, messagingPlayer.PlayerInfo.RoomState)
 	}
 
 	var err error
 
-	currentStage := 1 + len(messagingPlayer.Contributions)
-	if messagingPlayer.Contributions == nil {
-		messagingPlayer.Contributions = make(map[string]string, messagingPlayer.LastStage)
+	currentStage := 1 + len(messagingPlayer.PlayerInfo.Contributions)
+	if messagingPlayer.PlayerInfo.Contributions == nil {
+		messagingPlayer.PlayerInfo.Contributions = make(map[string]string, messagingPlayer.PlayerInfo.LastStage)
 	}
-	messagingPlayer.Contributions[strconv.Itoa(currentStage)] = message.Payload
-	messagingPlayer.Status = cb.Submitted
-	err = dbs.UpdatePlayerItem(*messagingPlayer)
+	messagingPlayer.PlayerInfo.Contributions[strconv.Itoa(currentStage)] = message.Payload
+	messagingPlayer.PlayerInfo.Status = cb.Submitted
+	err = dbs.UpdatePlayerItem(messagingPlayer)
 	if err != nil {
 		return err
 	}
 
 	for _, player := range players {
-		if player.Spectating {
+		if player.PlayerInfo.Spectating {
 			continue
 		}
 		// If this was not the last story, send roomUpdate and return
-		if player.Status != cb.Submitted {
+		if player.PlayerInfo.Status != cb.Submitted {
 			return sendRoomUpdate(wss, players)
 		}
 	}
 	// If it was, we proceed to a new stage
 
 	// Check if we've completed the story
-	if messagingPlayer.LastStage == currentStage {
+	if messagingPlayer.PlayerInfo.LastStage == currentStage {
 		// The story has been completed, show it.
 		for _, player := range players {
-			player.RoomState = cb.ShowStories
-			err = dbs.UpdatePlayerItem(*player)
+			player.PlayerInfo.RoomState = cb.ShowStories
+			err = dbs.UpdatePlayerItem(player)
 			if err != nil {
 				return err
 			}
@@ -421,20 +424,20 @@ func handleSubmitStory(dbs cb.DBService, wss cb.WSService, message cb.ClientMess
 
 	// Begin the next stage
 	for _, player := range players {
-		player.Status = cb.Writing
-		err = dbs.UpdatePlayerItem(*player)
+		player.PlayerInfo.Status = cb.Writing
+		err = dbs.UpdatePlayerItem(player)
 		if err != nil {
 			return err
 		}
 
-		lastStory := players.GetLastStory(player.UserName, strconv.Itoa(currentStage))
+		lastStory := players.GetLastStory(player.PlayerInfo.UserName, strconv.Itoa(currentStage))
 		if lastStory == "" {
-			log.Errorf("Could not find last story for user %s in current stage %d in room %s", player.UserName, currentStage+1, player.Room)
+			log.Errorf("Could not find last story for user %s in current stage %d in room %s", player.PlayerInfo.UserName, currentStage+1, player.Room)
 		}
 		updateMessage := cb.RoundUpdateMessage{
 			MessageType:  cb.RoundUpdate,
 			CurrentStage: currentStage,
-			LastStage:    player.LastStage,
+			LastStage:    player.PlayerInfo.LastStage,
 			Text:         lastStory,
 		}
 		err = wss.PostToConnection(player.ConnectionID, updateMessage)
@@ -451,9 +454,9 @@ func GenerateParticipants(players cb.PlayerItemList, numStages int) map[string]P
 	availableUsers := make([]string, 0, numPlayers)
 
 	for _, player := range players {
-		availableUsers = append(availableUsers, player.UserName)
-		result[player.UserName] = make(Participants, numStages)
-		result[player.UserName][1] = player.UserName
+		availableUsers = append(availableUsers, player.PlayerInfo.UserName)
+		result[player.PlayerInfo.UserName] = make(Participants, numStages)
+		result[player.PlayerInfo.UserName][1] = player.PlayerInfo.UserName
 	}
 	if numStages == 1 {
 		return result
@@ -463,7 +466,7 @@ func GenerateParticipants(players cb.PlayerItemList, numStages int) map[string]P
 
 	for stage := 2; stage <= numStages; stage++ {
 		if numPlayers == 1 {
-			result[players[0].UserName][stage] = players[0].UserName
+			result[players[0].PlayerInfo.UserName][stage] = players[0].PlayerInfo.UserName
 			continue
 		}
 
@@ -474,16 +477,16 @@ func GenerateParticipants(players cb.PlayerItemList, numStages int) map[string]P
 			success := false
 			for !success {
 				// Ensure we do not assign a player twice to the same story
-				if result[player.UserName][stage-1] == remainingPlayers[0] {
+				if result[player.PlayerInfo.UserName][stage-1] == remainingPlayers[0] {
 					rand.Shuffle(len(remainingPlayers), func(i, j int) { remainingPlayers[i], remainingPlayers[j] = remainingPlayers[j], remainingPlayers[i] })
 					break
 				}
 				// Ensure there is always more 1 stage distance between assignments
-				if numPlayers > 2 && stage >= 3 && result[player.UserName][stage-2] == remainingPlayers[0] {
+				if numPlayers > 2 && stage >= 3 && result[player.PlayerInfo.UserName][stage-2] == remainingPlayers[0] {
 					rand.Shuffle(len(remainingPlayers), func(i, j int) { remainingPlayers[i], remainingPlayers[j] = remainingPlayers[j], remainingPlayers[i] })
 					break
 				}
-				result[player.UserName][stage] = remainingPlayers[0]
+				result[player.PlayerInfo.UserName][stage] = remainingPlayers[0]
 				remainingPlayers = remainingPlayers[1:]
 				success = true
 			}

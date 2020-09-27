@@ -110,24 +110,29 @@ type CloseRoomMessage struct {
 
 /// DynamoDB item
 
+type PlayerInfo struct {
+	UserName      string            `json:"user_name"`
+	Status        UserStatus        `json:"user_status"`
+	IsAdmin       bool              `json:"is_admin"`
+	RoomState     RoomState         `json:"room_state"`
+	LastStage     int               `json:"last_stage"`
+	Spectating    bool              `json:"spectating"`
+	Contributions map[string]string `json:"contributions"`
+	Participants  map[string]string `json:"participants"`
+}
+
 type PlayerItem struct {
-	Room          string            `json:"room" dynamodbav:"room"`
+	Room           string      `json:"room" dynamodbav:"room"`
 	ConnectionID   string      `json:"connection_id" dynamodbav:"connection_id"`
-	UserName      string            `json:"user_name" dynamodbav:"user_name"`
-	Status        UserStatus        `json:"user_status" dynamodbav:"user_status"`
-	IsAdmin       bool              `json:"is_admin" dynamodbav:"is_admin"`
-	RoomState     RoomState         `json:"room_state" dynamodbav:"room_state"`
-	LastStage     int               `json:"last_stage" dynamodbav:"last_stage"`
-	Spectating    bool              `json:"spectating" dynamodbav:"spectating"`
-	Contributions map[string]string `json:"contributions" dynamodbav:"contributions"`
-	Participants  map[string]string `json:"participants" dynamodbav:"participants"`
+	PlayerInfo     *PlayerInfo `json:"player_info" dynamodbav:"player_info"`
+	ExpirationTime int64       `json:"expiration_time" dynamodbav:"expiration_time"`
 }
 
 type PlayerItemList []*PlayerItem
 
 func (pil PlayerItemList) GetAdmin() *PlayerItem {
 	for _, player := range pil {
-		if player.IsAdmin {
+		if player.PlayerInfo.IsAdmin {
 			return player
 		}
 	}
@@ -143,7 +148,7 @@ func (pil PlayerItemList) GetConnectionIDsOfPlayerItems() []string {
 }
 func (pil PlayerItemList) GetPlayerItemFromUserName(userName string) *PlayerItem {
 	for _, playerItem := range pil {
-		if playerItem.UserName == userName {
+		if playerItem.PlayerInfo.UserName == userName {
 			return playerItem
 		}
 	}
@@ -152,10 +157,11 @@ func (pil PlayerItemList) GetPlayerItemFromUserName(userName string) *PlayerItem
 func (pil PlayerItemList) PlayerItemListToPlayerList() PlayerList {
 	players := make([]Player, 0, len(pil))
 	for _, playerItem := range pil {
+		playerInfo := playerItem.PlayerInfo
 		players = append(players, Player{
-			UserName: playerItem.UserName,
-			Status:   playerItem.Status,
-			IsAdmin:  playerItem.IsAdmin,
+			UserName: playerInfo.UserName,
+			Status:   playerInfo.Status,
+			IsAdmin:  playerInfo.IsAdmin,
 		})
 	}
 	return players
@@ -165,8 +171,8 @@ func (pil PlayerItemList) GetLastStory(userName string, currentStage string) str
 	currentStageInt, _ := strconv.Atoi(currentStage)
 	nextStage := strconv.Itoa(currentStageInt + 1)
 	for _, player := range pil {
-		if player.Participants[nextStage] == userName {
-			return pil.GetPlayerItemFromUserName(player.Participants[currentStage]).Contributions[currentStage]
+		if player.PlayerInfo.Participants[nextStage] == userName {
+			return pil.GetPlayerItemFromUserName(player.PlayerInfo.Participants[currentStage]).PlayerInfo.Contributions[currentStage]
 		}
 	}
 	return ""
