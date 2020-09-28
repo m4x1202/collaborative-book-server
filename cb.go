@@ -1,6 +1,13 @@
 package cb
 
-import "strconv"
+import (
+	"encoding/json"
+	"strconv"
+
+	"github.com/aws/aws-sdk-go/service/dynamodb"
+	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
+	log "github.com/sirupsen/logrus"
+)
 
 const (
 	DefaultRoomName = "unknown"
@@ -121,11 +128,37 @@ type PlayerInfo struct {
 	Participants  map[string]string `json:"participants"`
 }
 
+func (m *PlayerInfo) MarshalDynamoDBAttributeValue(av *dynamodb.AttributeValue) error {
+	j, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	log.Debug(string(j))
+	marshaled, err := dynamodbattribute.Marshal(string(j))
+	if err != nil {
+		return err
+	}
+	*av = *marshaled
+	log.Debug(av)
+	return nil
+}
+
+func (u *PlayerInfo) UnmarshalDynamoDBAttributeValue(av *dynamodb.AttributeValue) error {
+	var unmarshalled string
+	if err := dynamodbattribute.Unmarshal(av, &unmarshalled); err != nil {
+		return err
+	}
+	if err := json.Unmarshal([]byte(unmarshalled), u); err != nil {
+		return err
+	}
+	return nil
+}
+
 type PlayerItem struct {
-	Room           string      `json:"room" dynamodbav:"room"`
-	ConnectionID   string      `json:"connection_id" dynamodbav:"connection_id"`
-	PlayerInfo     *PlayerInfo `json:"player_info" dynamodbav:"player_info"`
-	ExpirationTime int64       `json:"expiration_time" dynamodbav:"expiration_time"`
+	Room           string      `dynamodbav:"room"`
+	ConnectionID   string      `dynamodbav:"connection_id"`
+	PlayerInfo     *PlayerInfo `dynamodbav:"player_info"`
+	ExpirationTime int64       `dynamodbav:"expiration_time"`
 }
 
 type PlayerItemList []*PlayerItem
