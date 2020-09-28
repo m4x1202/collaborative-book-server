@@ -2,7 +2,9 @@ package cb
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
@@ -24,6 +26,32 @@ const (
 /// BEGIN Server/Client Interface
 
 type MessageType string
+
+func (mt MessageType) In(mtl []MessageType) bool {
+	for _, t := range mtl {
+		if t == mt {
+			return true
+		}
+	}
+	return false
+}
+
+var (
+	ClientMessageTypes = [...]MessageType{
+		Registration,
+		StartSession,
+		CloseRoom,
+		SubmitStory,
+		ShowStory,
+	}
+	ServerMessageTypes = [...]MessageType{
+		Registration,
+		RoomUmdate,
+		RoundUpdate,
+		ShowStory,
+		CloseRoom,
+	}
+)
 
 const (
 	Registration MessageType = "registration"
@@ -50,6 +78,19 @@ type ClientMessage struct {
 	Room        string      `json:"room"`
 	UserName    string      `json:"name"`
 	Payload     string      `json:"payload"`
+}
+
+func (cm *ClientMessage) Sanitize() error {
+	// Ensure room is case-insensitive
+	cm.Room = strings.ToLower(cm.Room)
+	if cm.Room == DefaultRoomName {
+		return fmt.Errorf("Room cannot be '%s'. This is a reserved room name", DefaultRoomName)
+	}
+
+	if !cm.MessageType.In(ClientMessageTypes[:]) {
+		return fmt.Errorf("ClientMessage message type unknown")
+	}
+	return nil
 }
 
 //Server

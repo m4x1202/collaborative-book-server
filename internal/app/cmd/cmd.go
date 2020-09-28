@@ -121,8 +121,9 @@ func Default(dbs cb.DBService, wss cb.WSService, request events.APIGatewayWebsoc
 		return err
 	}
 	log.Tracef("Client message received: %v", b)
-	if b.Room == cb.DefaultRoomName {
-		return fmt.Errorf("Room cannot be '%s'. This is a reserved room name", cb.DefaultRoomName)
+	err = b.Sanitize()
+	if err != nil {
+		return err
 	}
 
 	players, err := dbs.GetPlayerItems(b.Room)
