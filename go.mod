@@ -1,6 +1,6 @@
 module github.com/m4x1202/collaborative-book
 
-go 1.14
+go 1.15
 
 require (
 	github.com/aws/aws-lambda-go v1.19.1
