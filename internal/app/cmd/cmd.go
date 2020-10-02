@@ -59,10 +59,6 @@ func Handler(request events.APIGatewayWebsocketProxyRequest) (response interface
 		err = Connect(dbService, request)
 	case "$disconnect":
 		err = Disconnect(dbService, request)
-	case "ping":
-		err = wsService.PostToConnection(request.RequestContext.ConnectionID, struct {
-			Type string `json:"type"`
-		}{"pong"})
 	default:
 		log.Debugf("Route Key: %s", request.RequestContext.RouteKey)
 		err = Default(dbService, wsService, request)
