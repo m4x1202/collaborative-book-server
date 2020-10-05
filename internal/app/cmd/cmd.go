@@ -55,8 +55,6 @@ func Handler(request events.APIGatewayWebsocketProxyRequest) (response interface
 	wsService := apigateway.NewWSService(sess)
 
 	switch request.RequestContext.RouteKey {
-	case "$connect":
-		err = Connect(dbService, request)
 	case "$disconnect":
 		err = Disconnect(dbService, request)
 	default:
@@ -75,23 +73,6 @@ func Handler(request events.APIGatewayWebsocketProxyRequest) (response interface
 		StatusCode: 200,
 	}
 	return
-}
-
-// Connect will receive the $connect request
-func Connect(dbs cb.DBService, request events.APIGatewayWebsocketProxyRequest) error {
-	log.Debug("[Connect] - Method called")
-	playerItem := cb.PlayerItem{
-		Room:         cb.DefaultRoomName,
-		ConnectionID: request.RequestContext.ConnectionID,
-	}
-	err := dbs.UpdatePlayerItem(&playerItem)
-	if err != nil {
-		return err
-	}
-	log.Infof("Player with connection_id %s put into DynamoDB", request.RequestContext.ConnectionID)
-
-	log.Debug("[Connect] - Method successfully finished")
-	return nil
 }
 
 // Disconnect will receive the $disconnect requests
