@@ -82,8 +82,6 @@ func Disconnect(dbs cb.DBService, request events.APIGatewayWebsocketProxyRequest
 	if err != nil {
 		return err
 	}
-	log.Infof("Player with connection_id %s removed from DynamoDB", request.RequestContext.ConnectionID)
-
 	log.Debug("[Disconnect] - Method successfully finished")
 	return nil
 }

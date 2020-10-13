@@ -89,10 +89,12 @@ func (dbs DBService) RemovePlayerItem(player cb.PlayerItem) error {
 	if _, err := dbs.db.DeleteItem(deleteItemInput); err != nil {
 		return err
 	}
+	log.Debugf("Player with connection_id %s removed from DynamoDB", player.ConnectionID)
 	return nil
 }
 
 func (dbs DBService) RemoveConnection(connectionID string) error {
+	log.Infof("RemoveConnection triggered for connection_id %s", connectionID)
 	var conditionExpression expression.ConditionBuilder
 	conditionExpression = expression.Name("connection_id").Equal(expression.Value(connectionID))
 
