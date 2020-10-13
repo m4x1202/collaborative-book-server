@@ -100,7 +100,6 @@ func (dbs DBService) RemoveConnection(connectionID string) error {
 
 	expr, err := expression.NewBuilder().
 		WithFilter(conditionExpression).
-		WithProjection(expression.NamesList(expression.Name("room"))).
 		Build()
 	if err != nil {
 		return err
@@ -120,19 +119,22 @@ func (dbs DBService) RemoveConnection(connectionID string) error {
 	}
 	log.Tracef("Scan output: %v", *scanOutput)
 
-	var rooms []map[string]string
-	err = dynamodbattribute.UnmarshalListOfMaps(scanOutput.Items, &rooms)
+	var players []cb.PlayerItem
+	err = dynamodbattribute.UnmarshalListOfMaps(scanOutput.Items, &players)
 	if err != nil {
 		return err
 	}
 	var errs []error
-	for _, room := range rooms {
-		log.Debugf("Player with connection_id %s is in room %s", connectionID, room["room"])
+	for _, player := range players {
+		log.Debugf("Player with connection_id %s is in room %s", connectionID, player.Room)
+		if player.PlayerInfo.IsAdmin {
+			continue
+		}
+		if player.PlayerInfo.RoomState != cb.Lobby {
+			continue
+		}
 
-		err = dbs.RemovePlayerItem(cb.PlayerItem{
-			Room:         room["room"],
-			ConnectionID: connectionID,
-		})
+		err = dbs.RemovePlayerItem(player)
 		if err != nil {
 			errs = append(errs, err)
 		}
