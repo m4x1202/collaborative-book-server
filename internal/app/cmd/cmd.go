@@ -250,6 +250,11 @@ func handleStartSession(dbs cb.DBService, wss cb.WSService, message cb.ClientMes
 	if err != nil {
 		return err
 	}
+	// Make sure there is at least 1 stage to play
+	if payload.LastStage < 1 {
+		log.Warn("Stages to play smaller than 1! This shouldn't happen. Setting to fixed minimum value 1")
+		payload.LastStage = 1
+	}
 
 	participants := GenerateParticipants(players, payload.LastStage)
 
