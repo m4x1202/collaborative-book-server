@@ -460,12 +460,12 @@ func GenerateParticipants(players cb.PlayerItemList, numStages int) map[string]P
 				// Ensure we do not assign a player twice to the same story
 				if result[player.PlayerInfo.UserName][stage-1] == remainingPlayers[0] {
 					rand.Shuffle(len(remainingPlayers), func(i, j int) { remainingPlayers[i], remainingPlayers[j] = remainingPlayers[j], remainingPlayers[i] })
-					break
+					continue
 				}
 				// Ensure there is always more 1 stage distance between assignments
 				if numPlayers > 2 && stage >= 3 && result[player.PlayerInfo.UserName][stage-2] == remainingPlayers[0] {
 					rand.Shuffle(len(remainingPlayers), func(i, j int) { remainingPlayers[i], remainingPlayers[j] = remainingPlayers[j], remainingPlayers[i] })
-					break
+					continue
 				}
 				result[player.PlayerInfo.UserName][stage] = remainingPlayers[0]
 				remainingPlayers = remainingPlayers[1:]
