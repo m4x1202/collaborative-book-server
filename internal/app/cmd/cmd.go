@@ -432,10 +432,10 @@ func handleSubmitStory(dbs cb.DBService, wss cb.WSService, message cb.ClientMess
 func GenerateParticipants(players cb.PlayerItemList, numStages int) map[string]Participants {
 	numPlayers := len(players)
 	result := make(map[string]Participants, numPlayers)
-	availableUsers := make([]string, 0, numPlayers)
+	availableUsers := make([]string, numPlayers)
 
-	for _, player := range players {
-		availableUsers = append(availableUsers, player.PlayerInfo.UserName)
+	for i, player := range players {
+		availableUsers[i] = player.PlayerInfo.UserName
 		result[player.PlayerInfo.UserName] = make(Participants, numStages)
 		result[player.PlayerInfo.UserName][1] = player.PlayerInfo.UserName
 	}
@@ -451,7 +451,7 @@ func GenerateParticipants(players cb.PlayerItemList, numStages int) map[string]P
 			continue
 		}
 
-		remainingPlayers := make([]string, numPlayers, numPlayers)
+		remainingPlayers := make([]string, numPlayers)
 		copy(remainingPlayers, availableUsers)
 		rand.Shuffle(len(remainingPlayers), func(i, j int) { remainingPlayers[i], remainingPlayers[j] = remainingPlayers[j], remainingPlayers[i] })
 		for _, player := range players {
@@ -463,7 +463,7 @@ func GenerateParticipants(players cb.PlayerItemList, numStages int) map[string]P
 					continue
 				}
 				// Ensure there is always more 1 stage distance between assignments
-				if numPlayers > 2 && stage >= 3 && result[player.PlayerInfo.UserName][stage-2] == remainingPlayers[0] {
+				if numPlayers > 2 && stage > 2 && result[player.PlayerInfo.UserName][stage-2] == remainingPlayers[0] {
 					rand.Shuffle(len(remainingPlayers), func(i, j int) { remainingPlayers[i], remainingPlayers[j] = remainingPlayers[j], remainingPlayers[i] })
 					continue
 				}
