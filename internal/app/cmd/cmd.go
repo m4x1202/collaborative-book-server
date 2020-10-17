@@ -417,7 +417,7 @@ func handleSubmitStory(dbs cb.DBService, wss cb.WSService, message cb.ClientMess
 		}
 		updateMessage := cb.RoundUpdateMessage{
 			MessageType:  cb.RoundUpdate,
-			CurrentStage: currentStage,
+			CurrentStage: currentStage + 1,
 			LastStage:    player.PlayerInfo.LastStage,
 			Text:         lastStory,
 		}
