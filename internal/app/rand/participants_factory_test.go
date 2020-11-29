@@ -46,6 +46,21 @@ func Test_GenerateParticipants(t *testing.T) {
 	}
 }
 
+// Testing with unfair conditions to get code coverage up ;)
+// This state should not be possible to reach (having 2 players with the same name)
+func Test_GenerateParticipantsError(t *testing.T) {
+	players := []string{"0", "0"}
+	factory := NewParticipantsFactory(players)
+	for stages := 2; stages <= 5; stages++ {
+		t.Run(fmt.Sprintf("%d stages", stages), func(t *testing.T) {
+			_, err := factory.Generate(stages)
+			if err == nil {
+				t.FailNow()
+			}
+		})
+	}
+}
+
 func Benchmark_GenerateParticipants(b *testing.B) {
 	for playerNum := 1; playerNum <= 10; playerNum++ {
 		var players []string

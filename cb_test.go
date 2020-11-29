@@ -25,6 +25,28 @@ func Test_ParticipantsConditionsMet(t *testing.T) {
 	}
 }
 
+func Test_ParticipantsConditionsMet1Player(t *testing.T) {
+	participants := Participants{
+		1: "a",
+		2: "a",
+	}
+	condMet := participants.ConditionsMet(1)
+	if !condMet {
+		t.FailNow()
+	}
+}
+
+func Test_ParticipantsConditionsNotMet1Player(t *testing.T) {
+	participants := Participants{
+		1: "a",
+		2: "b",
+	}
+	condMet := participants.ConditionsMet(1)
+	if condMet {
+		t.FailNow()
+	}
+}
+
 func Test_ParticipantsConditionsNotMet(t *testing.T) {
 	participants := Participants{
 		1: "a",
@@ -49,6 +71,18 @@ func Test_ParticipantsConditionsMet2(t *testing.T) {
 }
 
 func Test_ParticipantsConditionsNotMet2(t *testing.T) {
+	participants := Participants{
+		1: "a",
+		2: "b",
+		3: "c",
+	}
+	condMet := participants.ConditionsMet(2)
+	if condMet {
+		t.FailNow()
+	}
+}
+
+func Test_ParticipantsConditionsNotMet3(t *testing.T) {
 	participants := Participants{
 		1: "a",
 		2: "b",
