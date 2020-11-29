@@ -1,6 +1,8 @@
 package cb
 
-import "testing"
+import (
+	"testing"
+)
 
 func Test_ParticipantsConditionsMet1Stage(t *testing.T) {
 	participants := Participants{

@@ -70,7 +70,6 @@ func (pf *ParticipantsFactory) Generate(numStages int) (map[string]cb.Participan
 }
 
 func generateMatchingsForStage(matchingSoFar map[string]cb.Participants, availPlayers []string, numPlayer int) (map[string]string, error) {
-	available := make([]string, numPlayer)
 	var matchingForStage map[string]string
 	iterations := 0
 	conditionsBroken := true
@@ -81,17 +80,14 @@ func generateMatchingsForStage(matchingSoFar map[string]cb.Participants, availPl
 		iterations++
 		matchingForStage = make(map[string]string, numPlayer)
 		conditionsBroken = false
-		perm := rand.Perm(numPlayer)
-		for i, v := range perm {
-			available[v] = availPlayers[i]
-		}
+		rand.Shuffle(numPlayer, func(i, j int) { availPlayers[i], availPlayers[j] = availPlayers[j], availPlayers[i] })
 		count := 0
 		for player, participants := range matchingSoFar {
-			if !participants.ParticipantWouldMeetConditions(available[count], numPlayer) {
+			if !participants.ParticipantWouldMeetConditions(availPlayers[count], numPlayer) {
 				conditionsBroken = true
 				break
 			}
-			matchingForStage[player] = available[count]
+			matchingForStage[player] = availPlayers[count]
 			count++
 		}
 	}
