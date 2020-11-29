@@ -15,6 +15,10 @@ const (
 	DefaultRoomName = "unknown"
 )
 
+var (
+	Version = "0.0.1"
+)
+
 type RoomState int
 
 const (
@@ -302,14 +306,32 @@ func (in Participants) ConditionsMet(numPlayers int) bool {
 		return true
 	}
 	for stage := 2; stage <= len(in); stage++ {
-		// Check if previous assignee same as current
-		if in[stage-1] == in[stage] {
-			return false
-		}
-		// Check if assignee 2 stages ago same as current
-		// Only possible if there are more than 2 players
-		if numPlayers > 2 && stage > 2 && in[stage-2] == in[stage] {
-			return false
+		if numPlayers <= 1 {
+			// This check shouldn't be neccessary, but to ensure everything is correct we still do it
+			// Also to verify the results of the benchmark
+			if in[stage-1] != in[stage] {
+				return false
+			}
+		} else {
+			// Check if previous assignee same as current
+			if in[stage-1] == in[stage] {
+				return false
+			}
+			if stage > 2 {
+				if numPlayers == 2 {
+					// This check shouldn't be neccessary, but to ensure everything is correct we still do it
+					// Also to verify the results of the benchmark
+					// Verify that 2 players are always alternating
+					if in[stage-2] != in[stage] {
+						return false
+					}
+				} else {
+					// Check if assignee 2 stages ago same as current
+					if in[stage-2] == in[stage] {
+						return false
+					}
+				}
+			}
 		}
 	}
 	return true

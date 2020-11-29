@@ -23,6 +23,8 @@ func Run() int {
 	log.SetReportCaller(true)
 	log.SetLevel(log.InfoLevel)
 
+	log.Infof("collaborative-book-server.version: %s", cb.Version)
+
 	lambda.Start(Handler)
 	return 0
 }
