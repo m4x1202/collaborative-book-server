@@ -213,6 +213,14 @@ func (pil PlayerItemList) GetAdmin() *PlayerItem {
 	return nil
 }
 
+func (pil PlayerItemList) GetPlayerNames() []string {
+	playerNames := make([]string, len(pil))
+	for i, playerItem := range pil {
+		playerNames[i] = playerItem.PlayerInfo.UserName
+	}
+	return playerNames
+}
+
 func (pil PlayerItemList) GetConnectionIDsOfPlayerItems() []string {
 	connectionIDs := make([]string, 0, len(pil))
 	for _, player := range pil {
@@ -263,4 +271,46 @@ type DBService interface {
 type WSService interface {
 	PostToConnection(connectionID string, data interface{}) error
 	PostToConnections(connectionIDs []string, data interface{}) error
+}
+
+type ParticipantsFactory interface {
+	Generate(numStages int) (map[string]Participants, error)
+}
+
+type Participants map[int]string
+
+func (in Participants) ToStringMap() map[string]string {
+	out := make(map[string]string, len(in))
+	for key, val := range in {
+		out[strconv.Itoa(key)] = val
+	}
+	return out
+}
+
+func (in Participants) ParticipantWouldMeetConditions(player string, numPlayers int) bool {
+	stage := len(in) + 1
+	newParticipants := make(Participants, stage)
+	for prevStage, participant := range in {
+		newParticipants[prevStage] = participant
+	}
+	newParticipants[stage] = player
+	return newParticipants.ConditionsMet(numPlayers)
+}
+
+func (in Participants) ConditionsMet(numPlayers int) bool {
+	if len(in) <= 1 {
+		return true
+	}
+	for stage := 2; stage <= len(in); stage++ {
+		// Check if previous assignee same as current
+		if in[stage-1] == in[stage] {
+			return false
+		}
+		// Check if assignee 2 stages ago same as current
+		// Only possible if there are more than 2 players
+		if numPlayers > 2 && stage > 2 && in[stage-2] == in[stage] {
+			return false
+		}
+	}
+	return true
 }

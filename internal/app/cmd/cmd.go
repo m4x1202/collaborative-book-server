@@ -3,11 +3,9 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -16,6 +14,7 @@ import (
 	cb "github.com/m4x1202/collaborative-book"
 	"github.com/m4x1202/collaborative-book/internal/app/apigateway"
 	"github.com/m4x1202/collaborative-book/internal/app/dynamodb"
+	cbrand "github.com/m4x1202/collaborative-book/internal/app/rand"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -254,7 +253,10 @@ func handleStartSession(dbs cb.DBService, wss cb.WSService, message cb.ClientMes
 		payload.LastStage = 1
 	}
 
-	participants := GenerateParticipants(players, payload.LastStage)
+	participants, err := cbrand.NewParticipantsFactory(players.GetPlayerNames()).Generate(payload.LastStage)
+	if err != nil {
+		return err
+	}
 
 	for _, player := range players {
 		playerInfo := player.PlayerInfo
@@ -427,62 +429,4 @@ func handleSubmitStory(dbs cb.DBService, wss cb.WSService, message cb.ClientMess
 		}
 	}
 	return sendRoomUpdate(wss, players) // Something changed in this room so we immediately send an update
-}
-
-func GenerateParticipants(players cb.PlayerItemList, numStages int) map[string]Participants {
-	numPlayers := len(players)
-	result := make(map[string]Participants, numPlayers)
-	availableUsers := make([]string, numPlayers)
-
-	for i, player := range players {
-		availableUsers[i] = player.PlayerInfo.UserName
-		result[player.PlayerInfo.UserName] = make(Participants, numStages)
-		result[player.PlayerInfo.UserName][1] = player.PlayerInfo.UserName
-	}
-	if numStages == 1 {
-		return result
-	}
-
-	rand.Seed(time.Now().UnixNano())
-
-	for stage := 2; stage <= numStages; stage++ {
-		if numPlayers == 1 {
-			result[players[0].PlayerInfo.UserName][stage] = players[0].PlayerInfo.UserName
-			continue
-		}
-
-		remainingPlayers := make([]string, numPlayers)
-		copy(remainingPlayers, availableUsers)
-		rand.Shuffle(len(remainingPlayers), func(i, j int) { remainingPlayers[i], remainingPlayers[j] = remainingPlayers[j], remainingPlayers[i] })
-		for _, player := range players {
-			success := false
-			for !success {
-				// Ensure we do not assign a player twice to the same story
-				if result[player.PlayerInfo.UserName][stage-1] == remainingPlayers[0] {
-					rand.Shuffle(len(remainingPlayers), func(i, j int) { remainingPlayers[i], remainingPlayers[j] = remainingPlayers[j], remainingPlayers[i] })
-					continue
-				}
-				// Ensure there is always more 1 stage distance between assignments
-				if numPlayers > 2 && stage > 2 && result[player.PlayerInfo.UserName][stage-2] == remainingPlayers[0] {
-					rand.Shuffle(len(remainingPlayers), func(i, j int) { remainingPlayers[i], remainingPlayers[j] = remainingPlayers[j], remainingPlayers[i] })
-					continue
-				}
-				result[player.PlayerInfo.UserName][stage] = remainingPlayers[0]
-				remainingPlayers = remainingPlayers[1:]
-				success = true
-			}
-		}
-	}
-
-	return result
-}
-
-type Participants map[int]string
-
-func (in Participants) ToStringMap() map[string]string {
-	out := make(map[string]string, len(in))
-	for key, val := range in {
-		out[strconv.Itoa(key)] = val
-	}
-	return out
 }
