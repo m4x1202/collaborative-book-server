@@ -1,37 +1,36 @@
-name: Go
+name: Release collaborative-book-server
 
 on:
   push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
+    branches:
+      - master
+  release:
+    types: [created]
 
 jobs:
-
   build:
     name: Build
     runs-on: ubuntu-latest
     steps:
-
     - name: Set up Go 1.x
       uses: actions/setup-go@v2
       with:
         go-version: ^1.15
-
     - name: Check out code into the Go module directory
       uses: actions/checkout@v2
-
-    - uses: actions/cache@v2
+    - name: Go cache
+      uses: actions/cache@v2
       with:
         path: |
-          ~/go/pkg/mod              # Module download cache
-          ~/.cache/go-build         # Build cache (Linux)
+          ~/go/pkg/mod
+          ~/.cache/go-build
         key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
         restore-keys: |
           ${{ runner.os }}-go-
-
-    - name: Build
-      run: go build -v -ldflags="-s -w" cmd/lambda/main.go
-
+          ${{ runner.os }}-
+    - name: Get dependencies
+      run: go mod download
     - name: Test
       run: go test -v ./...
+    - name: Build collaborative-book-server
+      run: go build -v -ldflags="-s -w" cmd/lambda/main.go
