@@ -4,6 +4,20 @@ import (
 	"testing"
 )
 
+func Test_ParticipantsToStringMap(t *testing.T) {
+	participants := Participants{
+		1: "a",
+	}
+	result := participants.ToStringMap()
+	val, ok := result["1"]
+	if !ok {
+		t.FailNow()
+	}
+	if val != "a" {
+		t.FailNow()
+	}
+}
+
 func Test_ParticipantsConditionsMet1Stage(t *testing.T) {
 	participants := Participants{
 		1: "a",

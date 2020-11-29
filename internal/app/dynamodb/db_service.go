@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
+	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbiface"
 	"github.com/aws/aws-sdk-go/service/dynamodb/expression"
 	cb "github.com/m4x1202/collaborative-book"
 	log "github.com/sirupsen/logrus"
@@ -22,12 +23,12 @@ var _ cb.DBService = (*DBService)(nil)
 
 // A service that holds dynamodb db service functionality
 type DBService struct {
-	db *dynamodb.DynamoDB
+	DB dynamodbiface.DynamoDBAPI
 }
 
 func NewDBService(sess *session.Session) DBService {
 	return DBService{
-		db: dynamodb.New(sess),
+		DB: dynamodb.New(sess),
 	}
 }
 
@@ -64,7 +65,7 @@ func (dbs DBService) UpdatePlayerItem(player *cb.PlayerItem) error {
 		UpdateExpression:          expr.Update(),
 	}
 
-	if _, err = dbs.db.UpdateItem(updateItemInput); err != nil {
+	if _, err = dbs.DB.UpdateItem(updateItemInput); err != nil {
 		return err
 	}
 	return nil
@@ -86,7 +87,7 @@ func (dbs DBService) RemovePlayerItem(player cb.PlayerItem) error {
 		TableName: aws.String(DynamoDBTable),
 		Key:       marshalPlayerKey(player),
 	}
-	if _, err := dbs.db.DeleteItem(deleteItemInput); err != nil {
+	if _, err := dbs.DB.DeleteItem(deleteItemInput); err != nil {
 		return err
 	}
 	log.Debugf("Player with connection_id %s removed from DynamoDB", player.ConnectionID)
@@ -113,7 +114,7 @@ func (dbs DBService) RemoveConnection(connectionID string) error {
 		FilterExpression:          expr.Filter(),
 	}
 
-	scanOutput, err := dbs.db.Scan(scanInput)
+	scanOutput, err := dbs.DB.Scan(scanInput)
 	if err != nil {
 		return err
 	}
@@ -163,7 +164,7 @@ func (dbs DBService) GetPlayerItems(room string) (cb.PlayerItemList, error) {
 		KeyConditionExpression:    expr.KeyCondition(),
 	}
 
-	queryOutput, err := dbs.db.Query(queryInput)
+	queryOutput, err := dbs.DB.Query(queryInput)
 	if err != nil {
 		return nil, err
 	}

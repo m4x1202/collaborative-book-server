@@ -7,6 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/apigatewaymanagementapi"
+	"github.com/aws/aws-sdk-go/service/apigatewaymanagementapi/apigatewaymanagementapiiface"
 	cb "github.com/m4x1202/collaborative-book"
 )
 
@@ -19,12 +20,12 @@ var _ cb.WSService = (*WSService)(nil)
 
 // A service that holds dynamodb db service functionality
 type WSService struct {
-	apigateway *apigatewaymanagementapi.ApiGatewayManagementApi
+	Apigateway apigatewaymanagementapiiface.ApiGatewayManagementApiAPI
 }
 
 func NewWSService(sess *session.Session) WSService {
 	return WSService{
-		apigateway: apigatewaymanagementapi.New(sess, aws.NewConfig().WithEndpoint(APIGatewayEndpoint)),
+		Apigateway: apigatewaymanagementapi.New(sess, aws.NewConfig().WithEndpoint(APIGatewayEndpoint)),
 	}
 }
 
@@ -61,7 +62,7 @@ func (wss WSService) postToConnection(connectionID string, data []byte) error {
 		Data:         data,
 	}
 
-	if _, err := wss.apigateway.PostToConnection(input); err != nil {
+	if _, err := wss.Apigateway.PostToConnection(input); err != nil {
 		return err
 	}
 	return nil
