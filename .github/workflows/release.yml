@@ -33,4 +33,12 @@ jobs:
     - name: Test
       run: go test -v ./...
     - name: Build collaborative-book-server
-      run: go build -v -ldflags="-s -w" cmd/lambda/main.go
+      env:
+        GOOS: linux
+        GOARCH: amd64
+      run: go build -v -ldflags="-s -w" -o bin/cb-server-linux-amd64 cmd/lambda/main.go
+    - name: Upload collaborative-book-server
+      uses: actions/upload-artifact@v2
+      with:
+        name: cb-server-artifact
+        path: bin/
