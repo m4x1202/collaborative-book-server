@@ -1,10 +1,10 @@
 package utils
 
-import (
-	"github.com/aws/aws-sdk-go/service/apigatewaymanagementapi"
-	"github.com/aws/aws-sdk-go/service/apigatewaymanagementapi/apigatewaymanagementapiiface"
-	"github.com/aws/aws-sdk-go/service/dynamodb"
-	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbiface"
+/*import (
+	"github.com/aws/aws-sdk-go-v2/service/apigatewaymanagementapi"
+	"github.com/aws/aws-sdk-go-v2/service/apigatewaymanagementapi/apigatewaymanagementapiiface"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/dynamodbiface"
 )
 
 // A fakeDynamoDB instance
@@ -46,3 +46,4 @@ func (fd *FakeApiGatewayManagementApi) PostToConnection(input *apigatewaymanagem
 	output := new(apigatewaymanagementapi.PostToConnectionOutput)
 	return output, fd.Err
 }
+*/

@@ -1,15 +1,15 @@
 package dynamodb
 
 import (
+	"context"
 	"fmt"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/dynamodb"
-	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
-	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbiface"
-	"github.com/aws/aws-sdk-go/service/dynamodb/expression"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	cb "github.com/m4x1202/collaborative-book"
 	log "github.com/sirupsen/logrus"
 )
@@ -23,18 +23,18 @@ var _ cb.DBService = (*DBService)(nil)
 
 // A service that holds dynamodb db service functionality
 type DBService struct {
-	DB dynamodbiface.DynamoDBAPI
+	client *dynamodb.Client
 }
 
-func NewDBService(sess *session.Session) DBService {
+func NewDBService(conf aws.Config) DBService {
 	return DBService{
-		DB: dynamodb.New(sess),
+		client: dynamodb.NewFromConfig(conf),
 	}
 }
 
 func (dbs DBService) UpdatePlayerItem(player *cb.PlayerItem) error {
 	player.ExpirationTime = time.Now().Add(time.Hour * 2).Unix()
-	marshaledPlayer, err := dynamodbattribute.MarshalMap(player)
+	marshaledPlayer, err := attributevalue.MarshalMap(player)
 	if err != nil {
 		return err
 	}
@@ -65,7 +65,7 @@ func (dbs DBService) UpdatePlayerItem(player *cb.PlayerItem) error {
 		UpdateExpression:          expr.Update(),
 	}
 
-	if _, err = dbs.DB.UpdateItem(updateItemInput); err != nil {
+	if _, err = dbs.client.UpdateItem(context.TODO(), updateItemInput); err != nil {
 		return err
 	}
 	return nil
@@ -87,7 +87,7 @@ func (dbs DBService) RemovePlayerItem(player cb.PlayerItem) error {
 		TableName: aws.String(DynamoDBTable),
 		Key:       marshalPlayerKey(player),
 	}
-	if _, err := dbs.DB.DeleteItem(deleteItemInput); err != nil {
+	if _, err := dbs.client.DeleteItem(context.TODO(), deleteItemInput); err != nil {
 		return err
 	}
 	log.Debugf("Player with connection_id %s removed from DynamoDB", player.ConnectionID)
@@ -114,14 +114,14 @@ func (dbs DBService) RemoveConnection(connectionID string) error {
 		FilterExpression:          expr.Filter(),
 	}
 
-	scanOutput, err := dbs.DB.Scan(scanInput)
+	scanOutput, err := dbs.client.Scan(context.TODO(), scanInput)
 	if err != nil {
 		return err
 	}
 	log.Tracef("Scan output: %v", *scanOutput)
 
 	var players []cb.PlayerItem
-	err = dynamodbattribute.UnmarshalListOfMaps(scanOutput.Items, &players)
+	err = attributevalue.UnmarshalListOfMaps(scanOutput.Items, &players)
 	if err != nil {
 		return err
 	}
@@ -164,7 +164,7 @@ func (dbs DBService) GetPlayerItems(room string) (cb.PlayerItemList, error) {
 		KeyConditionExpression:    expr.KeyCondition(),
 	}
 
-	queryOutput, err := dbs.DB.Query(queryInput)
+	queryOutput, err := dbs.client.Query(context.TODO(), queryInput)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +173,7 @@ func (dbs DBService) GetPlayerItems(room string) (cb.PlayerItemList, error) {
 	var players cb.PlayerItemList
 	for _, i := range queryOutput.Items {
 		player := &cb.PlayerItem{}
-		if err := dynamodbattribute.UnmarshalMap(i, player); err != nil {
+		if err := attributevalue.UnmarshalMap(i, player); err != nil {
 			log.Error(err)
 			continue
 		}
@@ -182,13 +182,9 @@ func (dbs DBService) GetPlayerItems(room string) (cb.PlayerItemList, error) {
 	return players, nil
 }
 
-func marshalPlayerKey(player cb.PlayerItem) map[string]*dynamodb.AttributeValue {
-	return map[string]*dynamodb.AttributeValue{
-		"room": {
-			S: aws.String(player.Room),
-		},
-		"connection_id": {
-			S: aws.String(player.ConnectionID),
-		},
+func marshalPlayerKey(player cb.PlayerItem) map[string]types.AttributeValue {
+	return map[string]types.AttributeValue{
+		"room":          &types.AttributeValueMemberS{Value: player.Room},
+		"connection_id": &types.AttributeValueMemberS{Value: player.ConnectionID},
 	}
 }

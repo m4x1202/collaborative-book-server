@@ -1,6 +1,6 @@
 package apigateway
 
-import (
+/*import (
 	"testing"
 
 	"github.com/m4x1202/collaborative-book/internal/app/utils"
@@ -23,3 +23,4 @@ func Test_PostToConnections(t *testing.T) {
 		t.FailNow()
 	}
 }
+*/

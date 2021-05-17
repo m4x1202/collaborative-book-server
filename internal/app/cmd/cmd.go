@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,8 +10,7 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go-v2/config"
 	cb "github.com/m4x1202/collaborative-book"
 	"github.com/m4x1202/collaborative-book/internal/app/apigateway"
 	"github.com/m4x1202/collaborative-book/internal/app/dynamodb"
@@ -42,9 +42,7 @@ func Handler(request events.APIGatewayWebsocketProxyRequest) (response interface
 		}
 	}()
 
-	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String("eu-central-1"),
-	})
+	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion("eu-central-1"))
 	if err != nil {
 		log.Error(err)
 		response = events.APIGatewayProxyResponse{
@@ -52,8 +50,8 @@ func Handler(request events.APIGatewayWebsocketProxyRequest) (response interface
 		}
 		return
 	}
-	dbService := dynamodb.NewDBService(sess)
-	wsService := apigateway.NewWSService(sess)
+	dbService := dynamodb.NewDBService(cfg)
+	wsService := apigateway.NewWSService(cfg)
 
 	switch request.RequestContext.RouteKey {
 	case "$disconnect":
