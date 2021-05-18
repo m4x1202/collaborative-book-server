@@ -23,7 +23,14 @@ var _ cb.DBService = (*DBService)(nil)
 
 // A service that holds dynamodb db service functionality
 type DBService struct {
-	client *dynamodb.Client
+	client DynamoDBAPI
+}
+
+type DynamoDBAPI interface {
+	UpdateItem(ctx context.Context, params *dynamodb.UpdateItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error)
+	DeleteItem(ctx context.Context, params *dynamodb.DeleteItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error)
+	Scan(ctx context.Context, params *dynamodb.ScanInput, optFns ...func(*dynamodb.Options)) (*dynamodb.ScanOutput, error)
+	Query(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
 }
 
 func NewDBService(conf aws.Config) DBService {

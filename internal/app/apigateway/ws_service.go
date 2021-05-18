@@ -19,7 +19,11 @@ var _ cb.WSService = (*WSService)(nil)
 
 // A service that holds apigatewaymanagementapi service functionality
 type WSService struct {
-	client *apigatewaymanagementapi.Client
+	client ApiGatewayManagementApiAPI
+}
+
+type ApiGatewayManagementApiAPI interface {
+	PostToConnection(ctx context.Context, params *apigatewaymanagementapi.PostToConnectionInput, optFns ...func(*apigatewaymanagementapi.Options)) (*apigatewaymanagementapi.PostToConnectionOutput, error)
 }
 
 func NewWSService(conf aws.Config) WSService {
