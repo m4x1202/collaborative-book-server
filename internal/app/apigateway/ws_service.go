@@ -1,13 +1,12 @@
 package apigateway
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/apigatewaymanagementapi"
-	"github.com/aws/aws-sdk-go/service/apigatewaymanagementapi/apigatewaymanagementapiiface"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/apigatewaymanagementapi"
 	cb "github.com/m4x1202/collaborative-book"
 )
 
@@ -15,17 +14,21 @@ const (
 	APIGatewayEndpoint = "r8sc9tucc2.execute-api.eu-central-1.amazonaws.com/dev"
 )
 
-//Ensure DBService implements cb.DBService
+//Ensure WSService implements cb.WSService
 var _ cb.WSService = (*WSService)(nil)
 
-// A service that holds dynamodb db service functionality
+// A service that holds apigatewaymanagementapi service functionality
 type WSService struct {
-	Apigateway apigatewaymanagementapiiface.ApiGatewayManagementApiAPI
+	client ApiGatewayManagementApiAPI
 }
 
-func NewWSService(sess *session.Session) WSService {
+type ApiGatewayManagementApiAPI interface {
+	PostToConnection(ctx context.Context, params *apigatewaymanagementapi.PostToConnectionInput, optFns ...func(*apigatewaymanagementapi.Options)) (*apigatewaymanagementapi.PostToConnectionOutput, error)
+}
+
+func NewWSService(conf aws.Config) WSService {
 	return WSService{
-		Apigateway: apigatewaymanagementapi.New(sess, aws.NewConfig().WithEndpoint(APIGatewayEndpoint)),
+		client: apigatewaymanagementapi.NewFromConfig(conf, apigatewaymanagementapi.WithEndpointResolver(apigatewaymanagementapi.EndpointResolverFromURL(APIGatewayEndpoint))),
 	}
 }
 
@@ -62,7 +65,7 @@ func (wss WSService) postToConnection(connectionID string, data []byte) error {
 		Data:         data,
 	}
 
-	if _, err := wss.Apigateway.PostToConnection(input); err != nil {
+	if _, err := wss.client.PostToConnection(context.TODO(), input); err != nil {
 		return err
 	}
 	return nil

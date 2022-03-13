@@ -6,17 +6,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/service/dynamodb"
-	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	log "github.com/sirupsen/logrus"
 )
 
 const (
 	DefaultRoomName = "unknown"
-)
-
-var (
-	Version = "0.0.1"
 )
 
 type RoomState int
@@ -81,7 +77,7 @@ type ClientMessage struct {
 	MessageType MessageType `json:"type"` // registration, start_session, close_room, submit_story, show_story
 	Room        string      `json:"room"`
 	UserName    string      `json:"name"`
-	Payload     string      `json:"payload"`
+	Payload     string      `json:"payload,omitempty"`
 }
 
 func (cm *ClientMessage) Sanitize() error {
@@ -173,24 +169,18 @@ type PlayerInfo struct {
 	Participants  map[string]string `json:"participants"`
 }
 
-func (m *PlayerInfo) MarshalDynamoDBAttributeValue(av *dynamodb.AttributeValue) error {
+func (m *PlayerInfo) MarshalDynamoDBAttributeValue() (types.AttributeValue, error) {
 	j, err := json.Marshal(m)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	log.Debug(string(j))
-	marshaled, err := dynamodbattribute.Marshal(string(j))
-	if err != nil {
-		return err
-	}
-	*av = *marshaled
-	log.Debug(av)
-	return nil
+	return attributevalue.Marshal(string(j))
 }
 
-func (u *PlayerInfo) UnmarshalDynamoDBAttributeValue(av *dynamodb.AttributeValue) error {
+func (u *PlayerInfo) UnmarshalDynamoDBAttributeValue(av types.AttributeValue) error {
 	var unmarshalled string
-	if err := dynamodbattribute.Unmarshal(av, &unmarshalled); err != nil {
+	if err := attributevalue.Unmarshal(av, &unmarshalled); err != nil {
 		return err
 	}
 	if err := json.Unmarshal([]byte(unmarshalled), u); err != nil {

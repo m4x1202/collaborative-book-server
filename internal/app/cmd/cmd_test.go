@@ -4,26 +4,24 @@ import (
 	"testing"
 
 	"github.com/aws/aws-lambda-go/events"
-	"github.com/aws/aws-sdk-go/service/dynamodb"
-	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
-	cb "github.com/m4x1202/collaborative-book"
-	cbdynamodb "github.com/m4x1202/collaborative-book/internal/app/dynamodb"
-	"github.com/m4x1202/collaborative-book/internal/app/utils"
+	mocks "github.com/m4x1202/collaborative-book/mocks"
+	"github.com/stretchr/testify/mock"
 )
 
 func Test_Disconnect(t *testing.T) {
-	player := cb.PlayerItem{
-		PlayerInfo: &cb.PlayerInfo{},
-	}
-	payload, _ := dynamodbattribute.MarshalMap(player)
-	service := cbdynamodb.DBService{
-		DB: &utils.FakeDynamoDB{
-			Payload: []map[string]*dynamodb.AttributeValue{payload},
-		},
-	}
-	request := new(events.APIGatewayWebsocketProxyRequest)
-	request.RequestContext.ConnectionID = "a"
-	if err := Disconnect(service, *request); err != nil {
+	service := &mocks.DBService{}
+	service.On("RemoveConnection", mock.AnythingOfType("string")).Return(nil)
+	if err := Disconnect(service, events.APIGatewayWebsocketProxyRequest{}); err != nil {
 		t.FailNow()
 	}
 }
+
+/*func Test_sendRoomUpdate(t *testing.T) {
+	service := &mocks.WSService{}
+	service.On("PostToConnection", mock.AnythingOfType("[]string"), mock.AnythingOfType("interface{}")).Return(nil)
+	var playerList cb.PlayerItemList
+	if err := sendRoomUpdate(service, playerList); err != nil {
+		t.FailNow()
+	}
+}
+*/
