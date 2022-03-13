@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/aws/aws-lambda-go/events"
-	cb "github.com/m4x1202/collaborative-book"
 	mocks "github.com/m4x1202/collaborative-book/mocks"
 	"github.com/stretchr/testify/mock"
 )
@@ -17,7 +16,7 @@ func Test_Disconnect(t *testing.T) {
 	}
 }
 
-func Test_sendRoomUpdate(t *testing.T) {
+/*func Test_sendRoomUpdate(t *testing.T) {
 	service := &mocks.WSService{}
 	service.On("PostToConnection", mock.AnythingOfType("[]string"), mock.AnythingOfType("interface{}")).Return(nil)
 	var playerList cb.PlayerItemList
@@ -25,3 +24,4 @@ func Test_sendRoomUpdate(t *testing.T) {
 		t.FailNow()
 	}
 }
+*/
