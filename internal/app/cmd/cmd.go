@@ -15,6 +15,7 @@ import (
 	"github.com/m4x1202/collaborative-book/internal/app/apigateway"
 	"github.com/m4x1202/collaborative-book/internal/app/dynamodb"
 	cbrand "github.com/m4x1202/collaborative-book/internal/app/rand"
+	"github.com/m4x1202/collaborative-book/internal/app/version"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -23,7 +24,7 @@ func Run() int {
 	log.SetReportCaller(true)
 	log.SetLevel(log.InfoLevel)
 
-	log.Infof("collaborative-book-server.version: %s", cb.Version)
+	log.Infof("collaborative-book-server.version: %s", version.Version)
 
 	lambda.Start(Handler)
 	return 0

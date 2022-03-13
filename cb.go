@@ -15,10 +15,6 @@ const (
 	DefaultRoomName = "unknown"
 )
 
-var (
-	Version = "0.0.1"
-)
-
 type RoomState int
 
 const (
