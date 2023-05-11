@@ -26,12 +26,12 @@ func Run() int {
 
 	log.Infof("collaborative-book-server.version: %s", version.Version)
 
-	lambda.Start(Handler)
+	lambda.StartWithOptions(Handler, lambda.WithContext(context.TODO()))
 	return 0
 }
 
 // Handler is the base handler that will receive all web socket request
-func Handler(request events.APIGatewayWebsocketProxyRequest) (response interface{}, err error) {
+func Handler(ctx context.Context, request events.APIGatewayWebsocketProxyRequest) (response interface{}, err error) {
 	log.Trace(request)
 
 	defer func() {
@@ -43,7 +43,7 @@ func Handler(request events.APIGatewayWebsocketProxyRequest) (response interface
 		}
 	}()
 
-	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion("eu-central-1"))
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion("eu-central-1"))
 	if err != nil {
 		log.Error(err)
 		response = events.APIGatewayProxyResponse{
@@ -51,8 +51,8 @@ func Handler(request events.APIGatewayWebsocketProxyRequest) (response interface
 		}
 		return
 	}
-	dbService := dynamodb.NewDBService(cfg)
-	wsService := apigateway.NewWSService(cfg)
+	dbService := dynamodb.NewDBService(ctx, cfg)
+	wsService := apigateway.NewWSService(ctx, cfg)
 
 	switch request.RequestContext.RouteKey {
 	case "$disconnect":

@@ -18,11 +18,12 @@ const (
 	DynamoDBTable = "collaborative-book-connections"
 )
 
-//Ensure DBService implements cb.DBService
+// Ensure DBService implements cb.DBService
 var _ cb.DBService = (*DBService)(nil)
 
 // A service that holds dynamodb db service functionality
 type DBService struct {
+	ctx    context.Context
 	client DynamoDBAPI
 }
 
@@ -33,8 +34,9 @@ type DynamoDBAPI interface {
 	Query(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
 }
 
-func NewDBService(conf aws.Config) DBService {
+func NewDBService(ctx context.Context, conf aws.Config) DBService {
 	return DBService{
+		ctx:    ctx,
 		client: dynamodb.NewFromConfig(conf),
 	}
 }
@@ -72,7 +74,7 @@ func (dbs DBService) UpdatePlayerItem(player *cb.PlayerItem) error {
 		UpdateExpression:          expr.Update(),
 	}
 
-	if _, err = dbs.client.UpdateItem(context.TODO(), updateItemInput); err != nil {
+	if _, err = dbs.client.UpdateItem(dbs.ctx, updateItemInput); err != nil {
 		return err
 	}
 	return nil
@@ -94,7 +96,7 @@ func (dbs DBService) RemovePlayerItem(player cb.PlayerItem) error {
 		TableName: aws.String(DynamoDBTable),
 		Key:       marshalPlayerKey(player),
 	}
-	if _, err := dbs.client.DeleteItem(context.TODO(), deleteItemInput); err != nil {
+	if _, err := dbs.client.DeleteItem(dbs.ctx, deleteItemInput); err != nil {
 		return err
 	}
 	log.Debugf("Player with connection_id %s removed from DynamoDB", player.ConnectionID)
@@ -121,7 +123,7 @@ func (dbs DBService) RemoveConnection(connectionID string) error {
 		FilterExpression:          expr.Filter(),
 	}
 
-	scanOutput, err := dbs.client.Scan(context.TODO(), scanInput)
+	scanOutput, err := dbs.client.Scan(dbs.ctx, scanInput)
 	if err != nil {
 		return err
 	}
@@ -171,7 +173,7 @@ func (dbs DBService) GetPlayerItems(room string) (cb.PlayerItemList, error) {
 		KeyConditionExpression:    expr.KeyCondition(),
 	}
 
-	queryOutput, err := dbs.client.Query(context.TODO(), queryInput)
+	queryOutput, err := dbs.client.Query(dbs.ctx, queryInput)
 	if err != nil {
 		return nil, err
 	}

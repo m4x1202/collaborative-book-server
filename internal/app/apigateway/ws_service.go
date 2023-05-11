@@ -19,6 +19,7 @@ var _ cb.WSService = (*WSService)(nil)
 
 // A service that holds apigatewaymanagementapi service functionality
 type WSService struct {
+	ctx    context.Context
 	client ApiGatewayManagementApiAPI
 }
 
@@ -26,8 +27,9 @@ type ApiGatewayManagementApiAPI interface {
 	PostToConnection(ctx context.Context, params *apigatewaymanagementapi.PostToConnectionInput, optFns ...func(*apigatewaymanagementapi.Options)) (*apigatewaymanagementapi.PostToConnectionOutput, error)
 }
 
-func NewWSService(conf aws.Config) WSService {
+func NewWSService(ctx context.Context, conf aws.Config) WSService {
 	return WSService{
+		ctx:    ctx,
 		client: apigatewaymanagementapi.NewFromConfig(conf, apigatewaymanagementapi.WithEndpointResolver(apigatewaymanagementapi.EndpointResolverFromURL(APIGatewayEndpoint))),
 	}
 }
@@ -65,7 +67,7 @@ func (wss WSService) postToConnection(connectionID string, data []byte) error {
 		Data:         data,
 	}
 
-	if _, err := wss.client.PostToConnection(context.TODO(), input); err != nil {
+	if _, err := wss.client.PostToConnection(wss.ctx, input); err != nil {
 		return err
 	}
 	return nil
