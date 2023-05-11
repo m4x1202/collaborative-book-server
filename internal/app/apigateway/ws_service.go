@@ -14,7 +14,7 @@ const (
 	APIGatewayEndpoint = "r8sc9tucc2.execute-api.eu-central-1.amazonaws.com/dev"
 )
 
-//Ensure WSService implements cb.WSService
+// Ensure WSService implements cb.WSService
 var _ cb.WSService = (*WSService)(nil)
 
 // A service that holds apigatewaymanagementapi service functionality
