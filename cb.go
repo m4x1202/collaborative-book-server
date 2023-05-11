@@ -119,16 +119,17 @@ type RegistrationResult struct {
 type UserStatus string
 
 const (
-	Waiting   UserStatus = "waiting"
-	Writing   UserStatus = "writing"
-	Submitted UserStatus = "submitted"
+	Waiting    UserStatus = "waiting"
+	Writing    UserStatus = "writing"
+	Submitted  UserStatus = "submitted"
+	Spectating UserStatus = "spectating"
 )
 
 type PlayerList []Player
 type Player struct {
 	UserName string     `json:"user_name"`
 	Status   UserStatus `json:"status"` // waiting, writing, submitted
-	IsAdmin  bool       `json:"is_admin"`
+	Type     PlayerType `json:"type"`
 }
 
 type RoomUpdateMessage struct {
@@ -158,13 +159,20 @@ type CloseRoomMessage struct {
 
 /// DynamoDB item
 
+type PlayerType int
+
+const (
+	TPlayer PlayerType = iota
+	TSpectator
+	TAdmin
+)
+
 type PlayerInfo struct {
 	UserName      string            `json:"user_name"`
 	Status        UserStatus        `json:"user_status"`
-	IsAdmin       bool              `json:"is_admin"`
+	Type          PlayerType        `json:"player_type"`
 	RoomState     RoomState         `json:"room_state"`
 	LastStage     int               `json:"last_stage"`
-	Spectating    bool              `json:"spectating"`
 	Contributions map[string]string `json:"contributions"`
 	Participants  map[string]string `json:"participants"`
 }
@@ -200,7 +208,7 @@ type PlayerItemList []*PlayerItem
 
 func (pil PlayerItemList) GetAdmin() *PlayerItem {
 	for _, player := range pil {
-		if player.PlayerInfo.IsAdmin {
+		if player.PlayerInfo.Type == TAdmin {
 			return player
 		}
 	}
@@ -237,7 +245,7 @@ func (pil PlayerItemList) PlayerItemListToPlayerList() PlayerList {
 		players = append(players, Player{
 			UserName: playerInfo.UserName,
 			Status:   playerInfo.Status,
-			IsAdmin:  playerInfo.IsAdmin,
+			Type:     playerInfo.Type,
 		})
 	}
 	return players

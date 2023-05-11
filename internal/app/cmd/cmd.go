@@ -136,9 +136,9 @@ func Default(dbs cb.DBService, wss cb.WSService, request events.APIGatewayWebsoc
 
 func register(dbs cb.DBService, connectionID string, message cb.ClientMessage, players cb.PlayerItemList) (cb.PlayerItemList, error) {
 	playerInfo := cb.PlayerInfo{
-		UserName:   message.UserName,
-		Spectating: true,
-		Status:     cb.Waiting,
+		UserName: message.UserName,
+		Status:   cb.Waiting,
+		Type:     cb.TSpectator,
 	}
 	player := &cb.PlayerItem{
 		Room:         message.Room,
@@ -170,7 +170,7 @@ func register(dbs cb.DBService, connectionID string, message cb.ClientMessage, p
 	}
 	if players.GetAdmin() == nil {
 		log.Infof("Room %s does not yet have an admin. New admin is user %s", player.Room, player.PlayerInfo.UserName)
-		player.PlayerInfo.IsAdmin = true
+		player.PlayerInfo.Type = cb.TAdmin
 	}
 	err = dbs.UpdatePlayerItem(player)
 	if err != nil {
@@ -238,7 +238,7 @@ func handleStartSession(dbs cb.DBService, wss cb.WSService, message cb.ClientMes
 		return fmt.Errorf("User %s that is not part of room %s tried to open a session", message.UserName, message.Room)
 	}
 	// Make sure only the admin opens a room
-	if !messagingPlayer.PlayerInfo.IsAdmin {
+	if messagingPlayer.PlayerInfo.Type != cb.TAdmin {
 		return fmt.Errorf("User %s that is not an admin in room %s tried to open a session", message.UserName, message.Room)
 	}
 
@@ -267,7 +267,7 @@ func handleStartSession(dbs cb.DBService, wss cb.WSService, message cb.ClientMes
 		playerInfo.LastStage = payload.LastStage
 		playerInfo.RoomState = cb.WriteStories
 		playerInfo.Status = cb.Writing
-		playerInfo.Spectating = false
+		playerInfo.Type = cb.TPlayer
 
 		err = dbs.UpdatePlayerItem(player)
 		if err != nil {
@@ -295,7 +295,7 @@ func handleCloseRoom(dbs cb.DBService, wss cb.WSService, message cb.ClientMessag
 		return fmt.Errorf("User %s that is not part of room %s tried to close the room", message.UserName, message.Room)
 	}
 	// Make sure only the admin closes a room
-	if !messagingPlayer.PlayerInfo.IsAdmin {
+	if messagingPlayer.PlayerInfo.Type != cb.TAdmin {
 		return fmt.Errorf("User %s that is not an admin in room %s tried to close the room", message.UserName, message.Room)
 	}
 
@@ -324,7 +324,7 @@ func handleShowStory(wss cb.WSService, message cb.ClientMessage, players cb.Play
 		return fmt.Errorf("User %s that is not part of room %s tried to show a message", message.UserName, message.Room)
 	}
 	// Make sure only the admin closes a room
-	if !messagingPlayer.PlayerInfo.IsAdmin {
+	if messagingPlayer.PlayerInfo.Type != cb.TAdmin {
 		return fmt.Errorf("User %s that is not an admin in room %s tried to show a message", message.UserName, message.Room)
 	}
 
@@ -361,7 +361,7 @@ func handleSubmitStory(dbs cb.DBService, wss cb.WSService, message cb.ClientMess
 		return fmt.Errorf("User %s that is not part of room %s tried to submit a story", message.UserName, message.Room)
 	}
 	// Make sure that the sender is participating in this session
-	if messagingPlayer.PlayerInfo.Spectating {
+	if messagingPlayer.PlayerInfo.Type == cb.TSpectator {
 		return fmt.Errorf("User %s is only spectating room %s but tried to submit a story", message.UserName, message.Room)
 	}
 	// Make sure that the room is in the right state
@@ -383,7 +383,7 @@ func handleSubmitStory(dbs cb.DBService, wss cb.WSService, message cb.ClientMess
 	}
 
 	for _, player := range players {
-		if player.PlayerInfo.Spectating {
+		if player.PlayerInfo.Type == cb.TSpectator {
 			continue
 		}
 		// If this was not the last story, send roomUpdate and return

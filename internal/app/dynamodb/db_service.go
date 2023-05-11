@@ -82,9 +82,9 @@ func (dbs DBService) UpdatePlayerItem(player *cb.PlayerItem) error {
 
 func (dbs DBService) ResetPlayerItem(player *cb.PlayerItem) error {
 	playerInfo := cb.PlayerInfo{
-		UserName:   player.PlayerInfo.UserName,
-		Status:     cb.Waiting,
-		Spectating: true,
+		UserName: player.PlayerInfo.UserName,
+		Status:   cb.Waiting,
+		Type:     cb.TSpectator,
 	}
 	player.PlayerInfo = &playerInfo
 
@@ -137,7 +137,7 @@ func (dbs DBService) RemoveConnection(connectionID string) error {
 	var errs []error
 	for _, player := range players {
 		log.Debugf("Player with connection_id %s is in room %s", connectionID, player.Room)
-		if player.PlayerInfo.IsAdmin {
+		if player.PlayerInfo.Type == cb.TAdmin {
 			continue
 		}
 		if player.PlayerInfo.RoomState != cb.Lobby {
