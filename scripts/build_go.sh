@@ -2,7 +2,7 @@
 set -e
 
 export GOOS=linux
-export GOARCH=amd64
+export GOARCH=arm64
 
 go test ./...
 
